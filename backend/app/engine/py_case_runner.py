@@ -38,18 +38,19 @@ def discover_case_class(case_dir: Path) -> type[BaseCase]:
     raise ValueError(f"No BaseCase subclass found in {case_file}")
 
 
-async def run_case(case_dir: Path, on_log=None) -> dict:
+async def run_case(case_dir: Path, on_log=None, execution_id: str | None = None) -> dict:
     """Run a Python-based test case.
 
     Args:
         case_dir: Path to the case directory containing case.py
         on_log: Optional callback for real-time log streaming
+        execution_id: Execution identifier for event publishing
 
     Returns:
         dict with case_name, status, total_steps, success_count, failed_count, steps
     """
     case_class = discover_case_class(case_dir)
-    case_instance = case_class(case_dir=case_dir)
+    case_instance = case_class(case_dir=case_dir, execution_id=execution_id or case_dir.name)
 
     logger.info(f"[PyRunner] Running {case_class.__name__} from {case_dir}")
 

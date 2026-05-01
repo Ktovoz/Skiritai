@@ -8,3 +8,6 @@ playwright>=1.40.0
 python-dotenv
 loguru
 pyyaml
+
+# Optional providers (install as needed):
+# langchain-anthropic>=0.3.0

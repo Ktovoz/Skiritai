@@ -26,12 +26,14 @@ class AIContext:
         step_id: str,
         on_log: Callable | None = None,
         default_mode: ActionMode = "auto",
+        execution_id: str = "default",
     ):
         self.page = page
         self.case_dir = case_dir
         self.step_id = step_id
         self.on_log = on_log
         self.default_mode = default_mode
+        self.execution_id = execution_id
         self.scripts_dir = case_dir / "scripts"
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
         self._last_result: dict | None = None
@@ -121,6 +123,7 @@ class AIContext:
             page=self.page,
             task_description=description,
             on_log=self.on_log,
+            execution_id=self.execution_id,
         )
 
         if result.get("success"):

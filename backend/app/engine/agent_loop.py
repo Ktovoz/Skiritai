@@ -1,13 +1,15 @@
 """Agent loop powered by LangGraph ReAct agent."""
 from __future__ import annotations
 
-import os
 from typing import Any
 
-from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 
-from app.engine.tools import ALL_TOOLS, set_page
+from app.engine.event_bus import Event, event_bus
+from app.engine.llm import get_provider
+from app.engine.tool_registry import ToolRegistry
+import app.engine.tools  # triggers tool registration via @register_tool
+from app.engine.tools import set_page
 from app.logger import logger
 
 SYSTEM_PROMPT = """你是一个浏览器自动化测试 Agent。你通过调用工具来操作浏览器完成测试任务。
@@ -29,21 +31,19 @@ SYSTEM_PROMPT = """你是一个浏览器自动化测试 Agent。你通过调用�
 """
 
 
-def _build_llm() -> ChatOpenAI:
-    return ChatOpenAI(
-        model=os.getenv("LLM_MODEL", "gpt-4o"),
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("OPENAI_BASE_URL"),
-        temperature=0.2,
-    )
+def _build_llm():
+    provider = get_provider()
+    return provider.build()
 
 
 def build_agent():
     """Build a LangGraph ReAct agent with Playwright tools."""
     llm = _build_llm()
+    registry = ToolRegistry()
+    tools = registry.get_all()
     return create_react_agent(
         model=llm,
-        tools=ALL_TOOLS,
+        tools=tools,
         prompt=SYSTEM_PROMPT,
     )
 
@@ -53,6 +53,7 @@ async def run_agent(
     task_description: str,
     url: str = "",
     on_log: Any = None,
+    execution_id: str = "default",
 ) -> dict:
     """
     Run the LangGraph ReAct agent on a task.
@@ -62,6 +63,7 @@ async def run_agent(
         task_description: What to accomplish
         url: Optional URL to navigate to first
         on_log: Optional callback for real-time log streaming
+        execution_id: Execution identifier for event publishing
 
     Returns:
         dict with keys: success, summary, steps
@@ -96,6 +98,11 @@ async def run_agent(
                             logger.info(f"[Agent] Tool call: {tool_name}({tool_args})")
                             if on_log:
                                 await on_log(f"调用工具: {tool_name}({tool_args})")
+                            await event_bus.publish(Event(
+                                type="tool_called",
+                                execution_id=execution_id,
+                                data={"tool_name": tool_name, "tool_args": tool_args},
+                            ))
                             steps.append({
                                 "action": tool_name,
                                 "args": tool_args,

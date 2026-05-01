@@ -9,6 +9,7 @@ from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 from app.engine.ai_context import AIContext, ActionMode
 from app.engine.browser import get_launch_args
+from app.engine.event_bus import Event, event_bus
 from app.logger import logger
 
 # Decorator to set default mode on a step method
@@ -50,8 +51,9 @@ class BaseCase:
                 await ai.action("搜索关键词")
     """
 
-    def __init__(self, case_dir: Path | None = None):
+    def __init__(self, case_dir: Path | None = None, execution_id: str | None = None):
         self._case_dir = case_dir or Path(inspect.getfile(self.__class__)).parent
+        self._execution_id = execution_id or "default"
         self._pw = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
@@ -128,6 +130,7 @@ class BaseCase:
             step_id=step_id,
             on_log=on_log,
             default_mode=default_mode,
+            execution_id=self._execution_id,
         )
 
     async def run_step(self, step_name: str, on_log=None) -> dict:
@@ -137,17 +140,33 @@ class BaseCase:
 
         logger.info(f"[Step] {step_name} (replay={ai.has_replay()})")
 
+        await event_bus.publish(Event(
+            type="step_started",
+            execution_id=self._execution_id,
+            data={"step_id": step_name},
+        ))
+
         try:
             result = await method(ai)
             # If method returns a dict, use it; otherwise use ai's result
             if result is None:
                 result = ai._last_result or {"success": True, "summary": "完成"}
+            status = "success" if result.get("success") else "failed"
             self._results.append({
                 "step_id": step_name,
-                "status": "success" if result.get("success") else "failed",
+                "status": status,
                 "mode": "replay" if ai.has_replay() else "explore",
                 "summary": result.get("summary", ""),
             })
+            await event_bus.publish(Event(
+                type="step_completed" if status == "success" else "step_failed",
+                execution_id=self._execution_id,
+                data={
+                    "step_id": step_name,
+                    "mode": "replay" if ai.has_replay() else "explore",
+                    "summary": result.get("summary", ""),
+                },
+            ))
             return result
         except Exception as e:
             logger.error(f"[Step] {step_name} error: {e}")
@@ -158,6 +177,11 @@ class BaseCase:
                 "summary": str(e),
                 "error": str(e),
             })
+            await event_bus.publish(Event(
+                type="step_failed",
+                execution_id=self._execution_id,
+                data={"step_id": step_name, "error": str(e)},
+            ))
             return {"success": False, "summary": str(e)}
 
     async def run(self) -> dict:
@@ -166,6 +190,12 @@ class BaseCase:
 
         steps = self.get_step_methods()
         logger.info(f"[Case] Steps: {steps}")
+
+        await event_bus.publish(Event(
+            type="execution_started",
+            execution_id=self._execution_id,
+            data={"case_name": self.__class__.__name__},
+        ))
 
         await self.setup()
 
@@ -194,4 +224,11 @@ class BaseCase:
         }
 
         logger.info(f"[Case] Done: {status} ({success_count}/{total})")
+
+        await event_bus.publish(Event(
+            type="execution_completed",
+            execution_id=self._execution_id,
+            data={"report": report},
+        ))
+
         return report

@@ -5,6 +5,8 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from app.engine.event_bus import Event
+
 
 class WSManager:
     def __init__(self):
@@ -32,6 +34,51 @@ class WSManager:
                 dead.append(ws)
         for ws in dead:
             self.disconnect(execution_id, ws)
+
+    async def handle_event(self, event: Event) -> None:
+        """Convert an Event into a WSMessage and broadcast it."""
+        ws_msg = self._event_to_ws_message(event)
+        if ws_msg:
+            await self.broadcast(event.execution_id, ws_msg)
+
+    def _event_to_ws_message(self, event: Event) -> dict | None:
+        if event.type == "step_started":
+            return {
+                "type": "node_status",
+                "node_id": event.data.get("step_id"),
+                "status": "running",
+            }
+        elif event.type in ("step_completed", "step_failed"):
+            return {
+                "type": "node_status",
+                "node_id": event.data.get("step_id"),
+                "status": "success" if event.type == "step_completed" else "failed",
+            }
+        elif event.type == "tool_called":
+            return {
+                "type": "log",
+                "node_id": event.data.get("tool_name"),
+                "data": {
+                    "message": f"调用工具: {event.data['tool_name']}({event.data.get('tool_args', {})})",
+                },
+            }
+        elif event.type == "execution_completed":
+            return {
+                "type": "execution_status",
+                "status": event.data.get("report", {}).get("status", "unknown"),
+                "data": {"report": event.data.get("report")},
+            }
+        elif event.type == "execution_started":
+            return {
+                "type": "execution_status",
+                "status": "running",
+            }
+        elif event.type == "log_message":
+            return {
+                "type": "log",
+                "data": {"message": event.data.get("message", "")},
+            }
+        return None
 
 
 ws_manager = WSManager()

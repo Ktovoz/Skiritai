@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.engine.event_bus import event_bus
 from app.engine.py_case_runner import discover_case_class, list_cases, run_case
 from app.engine.ws_manager import ws_manager
 from app.logger import logger
@@ -76,10 +77,16 @@ async def api_run_case(case_id: str):
         raise HTTPException(status_code=404, detail="Case not found")
 
     async def _run():
+        async def _ws_bridge(event):
+            await ws_manager.handle_event(event)
+
+        event_bus.subscribe(_ws_bridge)
         try:
-            await run_case(case_dir)
+            await run_case(case_dir, execution_id=case_id)
         except Exception as e:
             logger.error(f"[CaseRunner] Case {case_id} failed: {e}")
+        finally:
+            event_bus.unsubscribe(_ws_bridge)
 
     asyncio.create_task(_run())
     logger.info(f"[API] Case execution started: {case_id}")
@@ -133,39 +140,6 @@ async def api_update_script(case_id: str, step_id: str, body: ScriptUpdate):
 
     script_path.write_text(body.content, encoding="utf-8")
     return {"step_id": step_id, "content": body.content}
-
-
-class SolidifyRequest(BaseModel):
-    mode: str = "solidified"
-
-
-@router.post("/{case_id}/scripts/{step_id}/solidify")
-async def api_solidify_script(case_id: str, step_id: str):
-    """Mark a step's script as solidified by updating case.yaml."""
-    case_dir = CASES_ROOT / case_id
-    case_file = case_dir / "case.yaml"
-    if not case_file.exists():
-        raise HTTPException(status_code=404, detail="Case not found")
-
-    script_path = case_dir / "scripts" / f"{step_id}.py"
-    if not script_path.exists():
-        raise HTTPException(status_code=404, detail="Script not found")
-
-    import yaml
-    with open(case_file, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-
-    for step in data.get("steps", []):
-        if step["id"] == step_id:
-            step["mode"] = "solidified"
-            break
-    else:
-        raise HTTPException(status_code=404, detail="Step not found in case.yaml")
-
-    with open(case_file, "w", encoding="utf-8") as f:
-        yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
-
-    return {"step_id": step_id, "mode": "solidified"}
 
 
 # --- Result APIs ---

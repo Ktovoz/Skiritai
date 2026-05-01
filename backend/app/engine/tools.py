@@ -3,8 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from langchain_core.tools import tool
-
+from app.engine.tool_registry import register_tool
 from app.logger import logger
 
 # Module-level page reference, set by CaseRunner before invoking agent
@@ -24,7 +23,7 @@ def get_page() -> Any:
     return _page
 
 
-@tool
+@register_tool
 async def navigate(url: str) -> str:
     """导航到指定 URL。
 
@@ -37,7 +36,7 @@ async def navigate(url: str) -> str:
     return f"已导航到 {page.url}"
 
 
-@tool
+@register_tool
 async def click(selector: str) -> str:
     """点击页面元素。使用 CSS 选择器定位元素。
 
@@ -49,7 +48,7 @@ async def click(selector: str) -> str:
     return f"已点击元素: {selector}"
 
 
-@tool
+@register_tool
 async def click_force(selector: str) -> str:
     """强制点击元素（即使元素不可见）。适用于被遮挡或隐藏的元素。
 
@@ -61,7 +60,7 @@ async def click_force(selector: str) -> str:
     return f"已强制点击元素: {selector}"
 
 
-@tool
+@register_tool
 async def fill(selector: str, text: str) -> str:
     """在输入框中填写文本。要求元素可见。
 
@@ -74,7 +73,7 @@ async def fill(selector: str, text: str) -> str:
     return f"已在 {selector} 中填写: {text}"
 
 
-@tool
+@register_tool
 async def type_text(selector: str, text: str) -> str:
     """逐字符输入文本到元素。适用于隐藏或动态显示的输入框。
 
@@ -87,7 +86,7 @@ async def type_text(selector: str, text: str) -> str:
     return f"已在 {selector} 中输入: {text}"
 
 
-@tool
+@register_tool
 async def focus(selector: str) -> str:
     """聚焦到指定元素。
 
@@ -99,7 +98,7 @@ async def focus(selector: str) -> str:
     return f"已聚焦到 {selector}"
 
 
-@tool
+@register_tool
 async def get_text(selector: str) -> str:
     """获取指定元素的文本内容。
 
@@ -111,7 +110,7 @@ async def get_text(selector: str) -> str:
     return f"元素文本: {text}"
 
 
-@tool
+@register_tool
 async def wait_for(selector: str, timeout: int = 5000) -> str:
     """等待指定元素出现。
 
@@ -124,7 +123,7 @@ async def wait_for(selector: str, timeout: int = 5000) -> str:
     return f"元素已出现: {selector}"
 
 
-@tool
+@register_tool
 async def scroll(direction: str, amount: int = 500) -> str:
     """滚动页面。
 
@@ -138,7 +137,7 @@ async def scroll(direction: str, amount: int = 500) -> str:
     return f"已向{direction}滚动 {amount}px"
 
 
-@tool
+@register_tool
 async def get_page_info() -> str:
     """获取当前页面的标题、URL 和页面文本摘要。"""
     page = get_page()
@@ -148,7 +147,7 @@ async def get_page_info() -> str:
     return f"标题: {title}\nURL: {url}\n页面文本:\n{body_text}"
 
 
-@tool
+@register_tool
 async def eval_js(expression: str) -> str:
     """在页面中执行 JavaScript 表达式并返回结果。
 
@@ -160,7 +159,7 @@ async def eval_js(expression: str) -> str:
     return f"JS 执行结果: {result}"
 
 
-@tool
+@register_tool
 async def select_option(selector: str, value: str) -> str:
     """在下拉选择框中选择选项。
 
@@ -173,7 +172,7 @@ async def select_option(selector: str, value: str) -> str:
     return f"已选择 {value} in {selector}"
 
 
-@tool
+@register_tool
 async def hover(selector: str) -> str:
     """鼠标悬停在元素上。
 
@@ -183,10 +182,3 @@ async def hover(selector: str) -> str:
     page = get_page()
     await page.locator(selector).hover()
     return f"已悬停在 {selector}"
-
-
-# All tools for the agent
-ALL_TOOLS = [
-    navigate, click, click_force, fill, type_text, focus, get_text, wait_for,
-    scroll, get_page_info, eval_js, select_option, hover,
-]
