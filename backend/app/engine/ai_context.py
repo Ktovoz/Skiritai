@@ -51,7 +51,7 @@ class AIContext:
         Args:
             description: Natural language description of what to do
             mode: Execution mode override:
-                - None      — use default_mode from case.yaml or "auto"
+                - None      — use default_mode from @step_mode decorator or "auto"
                 - "auto"    — replay if script exists, otherwise explore
                 - "explore" — always explore with AI, overwrite existing script
                 - "replay"  — always replay, error if no script exists

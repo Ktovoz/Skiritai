@@ -5,12 +5,25 @@ import inspect
 from pathlib import Path
 from typing import Any
 
-import yaml
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 from app.engine.ai_context import AIContext, ActionMode
 from app.engine.browser import get_launch_args
 from app.logger import logger
+
+# Decorator to set default mode on a step method
+def step_mode(mode: ActionMode):
+    """Decorator to set the default execution mode for a step method.
+
+    Usage:
+        @step_mode("explore")
+        async def my_step(self, ai):
+            await ai.action("do something")
+    """
+    def decorator(func):
+        func._step_mode = mode
+        return func
+    return decorator
 
 
 class BaseCase:
@@ -32,6 +45,7 @@ class BaseCase:
             async def open_page(self, ai):
                 await ai.action("打开首页")
 
+            @step_mode("explore")
             async def search(self, ai):
                 await ai.action("搜索关键词")
     """
@@ -43,24 +57,6 @@ class BaseCase:
         self._context: BrowserContext | None = None
         self._page: Page | None = None
         self._results: list[dict] = []
-        self._step_modes: dict[str, ActionMode] = self._load_step_modes()
-
-    def _load_step_modes(self) -> dict[str, ActionMode]:
-        """Load per-step mode config from case.yaml."""
-        config_path = self._case_dir / "case.yaml"
-        if not config_path.exists():
-            return {}
-        try:
-            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            steps = config.get("steps", {})
-            return {
-                name: step.get("mode", "auto")
-                for name, step in steps.items()
-                if isinstance(step, dict)
-            }
-        except Exception as e:
-            logger.warning(f"[Case] Failed to load {config_path}: {e}")
-            return {}
 
     @property
     def case_dir(self) -> Path:
@@ -123,13 +119,15 @@ class BaseCase:
         return steps
 
     def _make_ai(self, step_id: str, on_log=None) -> AIContext:
-        """Create AIContext for a step with mode from case.yaml config."""
+        """Create AIContext for a step, reading mode from @step_mode decorator."""
+        method = getattr(self.__class__, step_id, None)
+        default_mode = getattr(method, "_step_mode", "auto") if method else "auto"
         return AIContext(
             page=self.page,
             case_dir=self._case_dir,
             step_id=step_id,
             on_log=on_log,
-            default_mode=self._step_modes.get(step_id, "auto"),
+            default_mode=default_mode,
         )
 
     async def run_step(self, step_name: str, on_log=None) -> dict:

@@ -1,9 +1,0 @@
-name: BaiduSearchCase
-description: 百度搜索测试用例
-steps:
-  open_baidu:
-    mode: auto
-  search_keyword:
-    mode: auto
-  verify_results:
-    mode: auto

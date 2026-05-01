@@ -1,9 +1,0 @@
-name: PlaywrightDocsCase
-description: Playwright 文档测试
-steps:
-  open_docs:
-    mode: auto
-  search_api:
-    mode: auto
-  verify_result:
-    mode: auto

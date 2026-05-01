@@ -1,9 +1,0 @@
-name: BaiduSearchExploreCase
-description: 百度搜索 - 探索模式
-steps:
-  open_baidu:
-    mode: explore
-  search_keyword:
-    mode: explore
-  verify_results:
-    mode: explore

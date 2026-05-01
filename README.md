@@ -67,11 +67,10 @@ Speedup: 30.3x
 
 ### Python-native Test Cases
 
-Define test cases as Python classes, with per-step mode config in `case.yaml`:
+Define test cases as Python classes. Use `@step_mode` to set per-step execution mode:
 
 ```python
-# cases/baidu_search/case.py
-from app.engine.base_case import BaseCase
+from app.engine.base_case import BaseCase, step_mode
 
 class BaiduSearchCase(BaseCase):
     async def setup(self):
@@ -83,6 +82,7 @@ class BaiduSearchCase(BaseCase):
     async def open_baidu(self, ai):
         await ai.action("Navigate to Baidu homepage")
 
+    @step_mode("explore")
     async def search_keyword(self, ai):
         await ai.action("Search for 'Playwright automation testing'")
 
@@ -90,23 +90,10 @@ class BaiduSearchCase(BaseCase):
         await ai.action("Verify search results loaded")
 ```
 
-```yaml
-# cases/baidu_search/case.yaml
-name: BaiduSearchCase
-description: Baidu search test case
-steps:
-  open_baidu:
-    mode: auto          # auto / explore / replay
-  search_keyword:
-    mode: explore       # force this step to always explore
-  verify_results:
-    mode: auto
-```
-
-The `mode` in `case.yaml` is the default for each step. It can still be overridden in code:
+You can also override mode directly in `ai.action()`:
 
 ```python
-await ai.action("Navigate to Baidu", mode="explore")  # overrides YAML config
+await ai.action("Navigate to Baidu", mode="explore")  # overrides @step_mode
 ```
 
 ---
@@ -146,7 +133,6 @@ backend/
 cases/
 ├── baidu_search/
 │   ├── case.py                # Test case definition
-│   ├── case.yaml              # Per-step mode config
 │   └── scripts/               # Replay scripts
 └── playwright_docs/
 frontend/

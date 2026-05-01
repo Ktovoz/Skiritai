@@ -65,11 +65,10 @@ await ai.action("导航到百度", mode="explore")
 
 ### Python 原生用例
 
-用 Python 类定义测试用例，通过 `case.yaml` 配置每个步骤的模式：
+用 Python 类定义测试用例，通过 `@step_mode` 装饰器配置每个步骤的模式：
 
 ```python
-# cases/baidu_search/case.py
-from app.engine.base_case import BaseCase
+from app.engine.base_case import BaseCase, step_mode
 
 class BaiduSearchCase(BaseCase):
     async def setup(self):
@@ -81,6 +80,7 @@ class BaiduSearchCase(BaseCase):
     async def open_baidu(self, ai):
         await ai.action("导航到百度首页")
 
+    @step_mode("explore")
     async def search_keyword(self, ai):
         await ai.action("搜索 'Playwright 自动化测试'")
 
@@ -88,23 +88,10 @@ class BaiduSearchCase(BaseCase):
         await ai.action("验证搜索结果")
 ```
 
-```yaml
-# cases/baidu_search/case.yaml
-name: BaiduSearchCase
-description: 百度搜索测试用例
-steps:
-  open_baidu:
-    mode: auto          # auto / explore / replay
-  search_keyword:
-    mode: explore       # 强制此步骤始终探索
-  verify_results:
-    mode: auto
-```
-
-`case.yaml` 中的 `mode` 是每个步骤的默认值，仍可在代码中覆盖：
+也可以在 `ai.action()` 中直接覆盖模式：
 
 ```python
-await ai.action("导航到百度", mode="explore")  # 覆盖 YAML 配置
+await ai.action("导航到百度", mode="explore")  # 覆盖 @step_mode
 ```
 
 ---
@@ -145,7 +132,6 @@ TestAgent/
 ├── cases/
 │   ├── baidu_search/
 │   │   ├── case.py                # 测试用例定义
-│   │   ├── case.yaml              # 每步骤模式配置
 │   │   ├── scripts/               # 回放脚本
 │   │   └── results/               # 执行结果
 │   └── playwright_docs/
