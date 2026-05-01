@@ -35,3 +35,6 @@ npm-debug.log*
 
 # Python
 *.egg-info/
+
+# Auto-generated replay scripts
+cases/*/scripts/
