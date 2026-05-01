@@ -1,0 +1,26 @@
+from dotenv import load_dotenv
+load_dotenv()
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.logger import logger
+from app.routers import cases, ws
+
+app = FastAPI(title="TestAgent", description="测试智能体编排系统")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(cases.router)
+app.include_router(ws.router)
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
