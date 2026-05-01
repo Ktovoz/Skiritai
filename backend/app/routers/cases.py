@@ -15,7 +15,7 @@ from app.logger import logger
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
-CASES_ROOT = Path(__file__).resolve().parent.parent.parent / "cases"
+CASES_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "cases"
 
 
 # --- Case APIs ---
