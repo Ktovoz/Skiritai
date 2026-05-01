@@ -21,6 +21,40 @@ The core concept: **"explore first, replay later"**:
 | **Explore** | AI analyzes the page, decides actions, generates replay scripts | First run, new feature verification |
 | **Replay** | Executes saved scripts directly, no AI reasoning | Regression testing, CI/CD integration |
 
+### How It Works
+
+`ai.action()` accepts an optional `mode` parameter to control execution:
+
+```python
+await ai.action("Navigate to Baidu")                    # auto (default)
+await ai.action("Navigate to Baidu", mode="auto")       # same as above
+await ai.action("Navigate to Baidu", mode="explore")    # force AI exploration
+await ai.action("Navigate to Baidu", mode="replay")     # force replay
+```
+
+| Mode | Behavior |
+|------|----------|
+| `auto` (default) | Replay if script exists, otherwise explore |
+| `explore` | Always use AI, overwrite existing script |
+| `replay` | Always replay, error if no script exists |
+
+**Default flow (`auto` mode):**
+
+```
+First run:
+  ai.action("Navigate to Baidu")  →  no script  →  AI explores  →  generates scripts/open_baidu.py
+
+Second run:
+  ai.action("Navigate to Baidu")  →  script exists  →  replay directly (no AI)
+```
+
+**Force re-explore** when replay result is unsatisfactory:
+
+```python
+# Re-explore this step even if a replay script already exists
+await ai.action("Navigate to Baidu", mode="explore")
+```
+
 ### 30x Performance Boost
 
 Replay mode skips AI inference entirely:
@@ -33,9 +67,10 @@ Speedup: 30.3x
 
 ### Python-native Test Cases
 
-Define test cases as Python classes instead of YAML:
+Define test cases as Python classes, with per-step mode config in `case.yaml`:
 
 ```python
+# cases/baidu_search/case.py
 from app.engine.base_case import BaseCase
 
 class BaiduSearchCase(BaseCase):
@@ -53,6 +88,25 @@ class BaiduSearchCase(BaseCase):
 
     async def verify_results(self, ai):
         await ai.action("Verify search results loaded")
+```
+
+```yaml
+# cases/baidu_search/case.yaml
+name: BaiduSearchCase
+description: Baidu search test case
+steps:
+  open_baidu:
+    mode: auto          # auto / explore / replay
+  search_keyword:
+    mode: explore       # force this step to always explore
+  verify_results:
+    mode: auto
+```
+
+The `mode` in `case.yaml` is the default for each step. It can still be overridden in code:
+
+```python
+await ai.action("Navigate to Baidu", mode="explore")  # overrides YAML config
 ```
 
 ---
@@ -92,6 +146,7 @@ backend/
 cases/
 ├── baidu_search/
 │   ├── case.py                # Test case definition
+│   ├── case.yaml              # Per-step mode config
 │   └── scripts/               # Replay scripts
 └── playwright_docs/
 frontend/

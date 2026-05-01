@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from app.engine.agent_loop import run_agent
 from app.engine.tools import set_page
 from app.logger import logger
+
+ActionMode = Literal["auto", "explore", "replay"]
 
 
 class AIContext:
@@ -23,11 +25,13 @@ class AIContext:
         case_dir: Path,
         step_id: str,
         on_log: Callable | None = None,
+        default_mode: ActionMode = "auto",
     ):
         self.page = page
         self.case_dir = case_dir
         self.step_id = step_id
         self.on_log = on_log
+        self.default_mode = default_mode
         self.scripts_dir = case_dir / "scripts"
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
         self._last_result: dict | None = None
@@ -41,19 +45,35 @@ class AIContext:
         """Check if a replay script exists for this step."""
         return self.script_path.exists()
 
-    async def action(self, description: str) -> dict:
-        """Execute an action - replay if script exists, otherwise explore.
+    async def action(self, description: str, mode: ActionMode | None = None) -> dict:
+        """Execute an action with configurable mode.
 
         Args:
             description: Natural language description of what to do
+            mode: Execution mode override:
+                - None      — use default_mode from case.yaml or "auto"
+                - "auto"    — replay if script exists, otherwise explore
+                - "explore" — always explore with AI, overwrite existing script
+                - "replay"  — always replay, error if no script exists
 
         Returns:
             dict with success, summary, steps
         """
-        if self.has_replay():
-            result = await self._replay()
-        else:
+        mode = mode or self.default_mode
+        if mode == "explore":
             result = await self._explore(description)
+        elif mode == "replay":
+            if not self.has_replay():
+                raise FileNotFoundError(
+                    f"No replay script for step '{self.step_id}': {self.script_path}. "
+                    f"Run in explore mode first to generate the script."
+                )
+            result = await self._replay()
+        else:  # auto
+            if self.has_replay():
+                result = await self._replay()
+            else:
+                result = await self._explore(description)
         self._last_result = result
         return result
 

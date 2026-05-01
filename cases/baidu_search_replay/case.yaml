@@ -1,0 +1,9 @@
+name: BaiduSearchReplayCase
+description: 百度搜索 - 回放模式
+steps:
+  open_baidu:
+    mode: replay
+  search_keyword:
+    mode: replay
+  verify_results:
+    mode: replay

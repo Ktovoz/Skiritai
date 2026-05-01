@@ -19,6 +19,40 @@ TestAgent 的核心理念是 **"先探索，后回放"**：
 | **探索模式** | AI 自主分析页面，决定操作，生成回放脚本 | 首次执行、新功能验证 |
 | **回放模式** | 直接执行已生成的脚本，无 AI 推理 | 回归测试、CI/CD 集成 |
 
+### 工作原理
+
+`ai.action()` 支持 `mode` 参数控制执行模式：
+
+```python
+await ai.action("导航到百度")                      # auto（默认）
+await ai.action("导航到百度", mode="auto")         # 同上
+await ai.action("导航到百度", mode="explore")      # 强制探索
+await ai.action("导航到百度", mode="replay")       # 强制回放
+```
+
+| 模式 | 行为 |
+|------|------|
+| `auto`（默认） | 有回放脚本则回放，否则探索 |
+| `explore` | 始终用 AI 探索，覆盖已有脚本 |
+| `replay` | 始终回放，无脚本则报错 |
+
+**默认流程（`auto` 模式）：**
+
+```
+首次运行:
+  ai.action("导航到百度")  →  没有脚本  →  AI 探索  →  生成 scripts/open_baidu.py
+
+再次运行:
+  ai.action("导航到百度")  →  脚本存在  →  直接回放（无 AI）
+```
+
+**回放结果不满意时，强制重新探索：**
+
+```python
+# 即使已有回放脚本，也强制重新探索
+await ai.action("导航到百度", mode="explore")
+```
+
 ### 30x 性能提升
 
 回放模式直接执行脚本，跳过 AI 推理环节：
@@ -31,9 +65,10 @@ TestAgent 的核心理念是 **"先探索，后回放"**：
 
 ### Python 原生用例
 
-用 Python 类定义测试用例，告别 YAML 配置：
+用 Python 类定义测试用例，通过 `case.yaml` 配置每个步骤的模式：
 
 ```python
+# cases/baidu_search/case.py
 from app.engine.base_case import BaseCase
 
 class BaiduSearchCase(BaseCase):
@@ -51,6 +86,25 @@ class BaiduSearchCase(BaseCase):
 
     async def verify_results(self, ai):
         await ai.action("验证搜索结果")
+```
+
+```yaml
+# cases/baidu_search/case.yaml
+name: BaiduSearchCase
+description: 百度搜索测试用例
+steps:
+  open_baidu:
+    mode: auto          # auto / explore / replay
+  search_keyword:
+    mode: explore       # 强制此步骤始终探索
+  verify_results:
+    mode: auto
+```
+
+`case.yaml` 中的 `mode` 是每个步骤的默认值，仍可在代码中覆盖：
+
+```python
+await ai.action("导航到百度", mode="explore")  # 覆盖 YAML 配置
 ```
 
 ---
@@ -91,6 +145,7 @@ TestAgent/
 ├── cases/
 │   ├── baidu_search/
 │   │   ├── case.py                # 测试用例定义
+│   │   ├── case.yaml              # 每步骤模式配置
 │   │   ├── scripts/               # 回放脚本
 │   │   └── results/               # 执行结果
 │   └── playwright_docs/
