@@ -38,3 +38,7 @@ npm-debug.log*
 
 # Auto-generated replay scripts
 cases/*/scripts/
+backend/tests/scripts/
+
+# Test execution results
+cases/*/results/

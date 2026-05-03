@@ -182,3 +182,16 @@ async def hover(selector: str) -> str:
     page = get_page()
     await page.locator(selector).hover()
     return f"已悬停在 {selector}"
+
+
+@register_tool
+async def screenshot(name: str = "screenshot") -> str:
+    """截取当前页面的截图并保存。
+
+    Args:
+        name: 截图文件名（不含扩展名），默认 'screenshot'
+    """
+    page = get_page()
+    path = f"/tmp/testagent_{name}.png"
+    await page.screenshot(path=path, full_page=True)
+    return f"截图已保存到 {path}"

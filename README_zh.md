@@ -183,7 +183,7 @@ open test_report.html
 
 ## 工具集
 
-TestAgent 提供 12 个 Playwright 工具，覆盖常见操作：
+TestAgent 提供 13 个 Playwright 工具，覆盖常见操作：
 
 | 工具 | 说明 |
 |------|------|
@@ -200,6 +200,7 @@ TestAgent 提供 12 个 Playwright 工具，覆盖常见操作：
 | `eval_js` | 执行 JavaScript |
 | `select_option` | 选择下拉选项 |
 | `hover` | 鼠标悬停 |
+| `screenshot` | 截取页面截图 |
 
 ---
 

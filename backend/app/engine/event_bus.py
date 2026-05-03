@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
+from app.logger import logger
+
 
 @dataclass
 class Event:
@@ -54,7 +56,10 @@ class EventBus:
             try:
                 await handler(event)
             except Exception:
-                pass
+                logger.error(
+                    f"[EventBus] Handler error for event '{event.type}': {handler}",
+                    exc_info=True,
+                )
 
 
 # Module-level singleton

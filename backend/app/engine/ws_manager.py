@@ -1,3 +1,4 @@
+"""WebSocket connection manager."""
 from __future__ import annotations
 
 import json
@@ -6,6 +7,7 @@ from typing import Any
 from fastapi import WebSocket
 
 from app.engine.event_bus import Event
+from app.logger import logger
 
 
 class WSManager:
@@ -34,6 +36,12 @@ class WSManager:
                 dead.append(ws)
         for ws in dead:
             self.disconnect(execution_id, ws)
+        if dead:
+            logger.warning(
+                "[WSManager] Removed {} dead connections for execution {}",
+                len(dead),
+                execution_id,
+            )
 
     async def handle_event(self, event: Event) -> None:
         """Convert an Event into a WSMessage and broadcast it."""
@@ -48,11 +56,25 @@ class WSManager:
                 "node_id": event.data.get("step_id"),
                 "status": "running",
             }
-        elif event.type in ("step_completed", "step_failed"):
+        elif event.type == "step_completed":
             return {
                 "type": "node_status",
                 "node_id": event.data.get("step_id"),
-                "status": "success" if event.type == "step_completed" else "failed",
+                "status": "success",
+                "data": {
+                    "mode": event.data.get("mode", ""),
+                    "summary": event.data.get("summary", ""),
+                },
+            }
+        elif event.type == "step_failed":
+            return {
+                "type": "node_status",
+                "node_id": event.data.get("step_id"),
+                "status": "failed",
+                "data": {
+                    "error": event.data.get("error", ""),
+                    "summary": event.data.get("summary", ""),
+                },
             }
         elif event.type == "tool_called":
             return {

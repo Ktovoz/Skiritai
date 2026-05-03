@@ -1,6 +1,9 @@
+import json
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.engine.ws_manager import ws_manager
+from app.logger import logger
 
 router = APIRouter(tags=["websocket"])
 
@@ -10,6 +13,18 @@ async def case_ws(websocket: WebSocket, case_id: str):
     await ws_manager.connect(case_id, websocket)
     try:
         while True:
-            await websocket.receive_text()
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+                if msg.get("command") == "stop":
+                    from app.routers.cases import _cancel_execution
+                    await _cancel_execution(case_id)
+                    await websocket.send_text(json.dumps({
+                        "type": "execution_status",
+                        "status": "cancelled",
+                        "data": {"message": "Execution cancelled by user"},
+                    }))
+            except json.JSONDecodeError:
+                logger.warning("[WS] Received invalid JSON from client")
     except WebSocketDisconnect:
         ws_manager.disconnect(case_id, websocket)

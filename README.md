@@ -194,6 +194,7 @@ TestAgent provides 13 Playwright tools:
 | `eval_js` | Execute JavaScript |
 | `select_option` | Select dropdown option |
 | `hover` | Hover over element |
+| `screenshot` | Capture page screenshot |
 
 ---
 

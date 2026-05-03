@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -16,6 +17,19 @@ from app.logger import logger
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 CASES_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "cases"
+
+# Execution task registry for cancellation
+_executions: dict[str, asyncio.Task] = {}
+
+
+async def _cancel_execution(case_id: str) -> bool:
+    """Cancel a running execution for the given case_id. Returns True if cancelled."""
+    task = _executions.pop(case_id, None)
+    if task and not task.done():
+        task.cancel()
+        logger.info(f"[API] Execution cancelled for case: {case_id}")
+        return True
+    return False
 
 
 # --- Case APIs ---
@@ -54,11 +68,19 @@ async def api_get_case(case_id: str):
                 "id": step,
                 "name": step,
                 "mode": "explore" if not (case_dir / "scripts" / f"{step}.py").exists() else "solidified",
-                "description": "",
+                "description": _get_step_description(case_class, step),
             }
             for step in steps
         ],
     }
+
+
+def _get_step_description(case_class: type, step_name: str) -> str:
+    """Extract the first line of a step method's docstring as description."""
+    method = getattr(case_class, step_name, None)
+    if method and method.__doc__:
+        return method.__doc__.strip().split("\n")[0]
+    return ""
 
 
 # --- Execution APIs ---
@@ -76,22 +98,75 @@ async def api_run_case(case_id: str):
     if not case_dir.exists():
         raise HTTPException(status_code=404, detail="Case not found")
 
+    # Cancel any previous execution for this case
+    await _cancel_execution(case_id)
+
     async def _run():
         async def _ws_bridge(event):
             await ws_manager.handle_event(event)
 
         event_bus.subscribe(_ws_bridge)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_dir = case_dir / "results" / timestamp
         try:
-            await run_case(case_dir, execution_id=case_id)
+            report = await run_case(case_dir, execution_id=case_id, results_dir=results_dir)
+            # Save result to disk
+            results_dir.mkdir(parents=True, exist_ok=True)
+            (results_dir / "report.json").write_text(
+                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8",
+            )
+            logger.info(f"[API] Case {case_id} completed, results saved to {results_dir}")
+        except asyncio.CancelledError:
+            logger.info(f"[API] Case {case_id} execution cancelled")
+            results_dir.mkdir(parents=True, exist_ok=True)
+            (results_dir / "report.json").write_text(
+                json.dumps({
+                    "case_name": case_id,
+                    "status": "cancelled",
+                    "total_steps": 0,
+                    "success_count": 0,
+                    "failed_count": 0,
+                    "steps": [],
+                }, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
         except Exception as e:
             logger.error(f"[CaseRunner] Case {case_id} failed: {e}")
+            results_dir.mkdir(parents=True, exist_ok=True)
+            (results_dir / "report.json").write_text(
+                json.dumps({
+                    "case_name": case_id,
+                    "status": "error",
+                    "total_steps": 0,
+                    "success_count": 0,
+                    "failed_count": 1,
+                    "steps": [{"step_id": "__execution__", "status": "failed", "error": str(e)}],
+                }, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
         finally:
             event_bus.unsubscribe(_ws_bridge)
+            _executions.pop(case_id, None)
 
-    asyncio.create_task(_run())
+    task = asyncio.create_task(_run())
+    _executions[case_id] = task
     logger.info(f"[API] Case execution started: {case_id}")
 
     return {"case_id": case_id, "status": "started", "message": "Execution started"}
+
+
+@router.post("/{case_id}/stop")
+async def api_stop_case(case_id: str):
+    """Stop a running case execution."""
+    case_dir = CASES_ROOT / case_id
+    if not case_dir.exists():
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    cancelled = await _cancel_execution(case_id)
+    if cancelled:
+        return {"case_id": case_id, "status": "cancelled", "message": "Execution cancelled"}
+    else:
+        return {"case_id": case_id, "status": "not_found", "message": "No running execution found"}
 
 
 # --- Script APIs ---
@@ -140,6 +215,35 @@ async def api_update_script(case_id: str, step_id: str, body: ScriptUpdate):
 
     script_path.write_text(body.content, encoding="utf-8")
     return {"step_id": step_id, "content": body.content}
+
+
+@router.post("/{case_id}/scripts/{step_id}/solidify")
+async def api_solidify_script(case_id: str, step_id: str):
+    """Solidify a script so it persists for replay mode.
+
+    This confirms the script exists and is ready for replay.
+    """
+    scripts_dir = CASES_ROOT / case_id / "scripts"
+    script_path = scripts_dir / f"{step_id}.py"
+
+    # Create scripts dir if it doesn't exist
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+
+    if not script_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Script not found. Run the case in explore mode first to generate the script.",
+        )
+
+    # Mark as solidified by creating a marker file
+    marker_path = scripts_dir / f".{step_id}.solidified"
+    marker_path.touch()
+
+    return {
+        "step_id": step_id,
+        "status": "solidified",
+        "message": "Script is solidified and ready for replay",
+    }
 
 
 # --- Result APIs ---
