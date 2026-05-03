@@ -1,3 +1,4 @@
+import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -9,9 +10,15 @@ from app.routers import cases, ws
 
 app = FastAPI(title="TestAgent", description="测试智能体编排系统")
 
+cors_origins_str = os.getenv(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:5173,http://localhost:5174,http://localhost:5175",
+)
+allow_origins = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
