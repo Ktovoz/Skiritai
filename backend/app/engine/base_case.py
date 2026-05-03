@@ -8,7 +8,15 @@ from typing import Any
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 from app.engine.ai_context import AIContext, ActionMode
-from app.engine.browser import get_launch_args
+from app.engine.browser import (
+    connect_to_browser,
+    get_launch_args,
+    has_persistent_session,
+    is_browser_alive,
+    kill_browser,
+    launch_browser_server,
+    cleanup_session,
+)
 from app.engine.event_bus import Event, event_bus
 from app.logger import logger
 
@@ -51,14 +59,16 @@ class BaseCase:
                 await ai.action("搜索关键词")
     """
 
-    def __init__(self, case_dir: Path | None = None, execution_id: str | None = None):
+    def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None):
         self._case_dir = case_dir or Path(inspect.getfile(self.__class__)).parent
         self._execution_id = execution_id or "default"
+        self._results_dir = results_dir
+        self._results: list[dict] = []
         self._pw = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
-        self._results: list[dict] = []
+        self._cdp_port: int | None = None  # Only set in persistent mode
 
     @property
     def case_dir(self) -> Path:
@@ -90,6 +100,65 @@ class BaseCase:
             await self._pw.stop()
         logger.info("[Case] Browser closed")
 
+    async def launch_browser_persistent(self):
+        """Launch browser as an independent process with CDP for session persistence.
+
+        The browser runs as a separate subprocess — it survives when this
+        Python program exits. The CDP port is persisted to case_dir.
+        """
+        self._pw = await async_playwright().start()
+        self._cdp_port, self._browser, self._context, self._page = (
+            await launch_browser_server(self._pw, self._case_dir)
+        )
+        logger.info(f"[Case] Persistent browser launched on CDP port {self._cdp_port}")
+
+    async def disconnect_browser(self):
+        """Disconnect from browser WITHOUT killing the browser process.
+
+        The browser keeps running. A future process can reconnect via
+        the persisted WebSocket endpoint file.
+        """
+        if self._browser:
+            await self._browser.close()  # disconnect, not terminate
+            self._browser = None
+            self._context = None
+            self._page = None
+        if self._pw:
+            await self._pw.stop()
+            self._pw = None
+        logger.info("[Case] Disconnected from browser (still running)")
+
+    async def reconnect_browser(self):
+        """Reconnect to an existing browser via persisted endpoint.
+
+        Raises FileNotFoundError if no session exists, ConnectionError
+        if the browser is no longer reachable.
+        """
+        self._pw = await async_playwright().start()
+        self._browser, self._context, self._page = await connect_to_browser(
+            self._pw, self._case_dir
+        )
+        logger.info("[Case] Reconnected to existing browser")
+
+    async def terminate_browser(self):
+        """Fully terminate the persistent browser and clean up session file.
+
+        This kills the browser subprocess and removes the session file.
+        """
+        if self._pw:
+            await self._pw.stop()
+            self._pw = None
+        self._browser = None
+        self._context = None
+        self._page = None
+        self._cdp_port = None
+        kill_browser(self._case_dir)
+        logger.info("[Case] Browser terminated and session cleaned up")
+
+    def has_browser_session(self) -> bool:
+        """Check if a persistent browser session file exists."""
+        return has_persistent_session(self._case_dir)
+
     async def setup(self):
         """Override to customize setup. Default launches browser."""
         await self.launch_browser()
@@ -117,7 +186,7 @@ class BaseCase:
                 if len(params) >= 2 and params[1] == "ai":
                     steps.append(name)
             except (ValueError, TypeError):
-                pass
+                logger.debug(f"[BaseCase] Cannot inspect signature for method: {name}")
         return steps
 
     def _make_ai(self, step_id: str, on_log=None) -> AIContext:
@@ -170,6 +239,16 @@ class BaseCase:
             return result
         except Exception as e:
             logger.error(f"[Step] {step_name} error: {e}")
+            # Auto screenshot on failure
+            if self._results_dir and self._page:
+                try:
+                    screenshots_dir = self._results_dir / "screenshots"
+                    screenshots_dir.mkdir(parents=True, exist_ok=True)
+                    screenshot_path = screenshots_dir / f"{step_name}.png"
+                    await self._page.screenshot(path=str(screenshot_path), full_page=True)
+                    logger.info(f"[Step] Screenshot saved: {screenshot_path}")
+                except Exception as se:
+                    logger.warning(f"[Step] Failed to capture screenshot: {se}")
             self._results.append({
                 "step_id": step_name,
                 "status": "failed",
