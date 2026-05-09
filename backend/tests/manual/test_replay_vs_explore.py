@@ -5,10 +5,10 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent.parent.parent / ".env")
 
 
 # Report data collector
@@ -26,7 +26,7 @@ async def test_explore_generates_scripts():
 
     from app.engine.py_case_runner import run_case
 
-    case_dir = Path(__file__).resolve().parent.parent.parent / "cases" / "baidu_search_explore"
+    case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search_explore"
     scripts_dir = case_dir / "scripts"
 
     # Clean existing scripts before test
@@ -76,8 +76,8 @@ async def test_replay_executes_scripts():
     from app.engine.py_case_runner import run_case
 
     # Use a separate case directory for replay
-    explore_case_dir = Path(__file__).resolve().parent.parent.parent / "cases" / "baidu_search_explore"
-    replay_case_dir = Path(__file__).resolve().parent.parent.parent / "cases" / "baidu_search_replay"
+    explore_case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search_explore"
+    replay_case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search_replay"
     explore_scripts_dir = explore_case_dir / "scripts"
     replay_scripts_dir = replay_case_dir / "scripts"
 
@@ -336,7 +336,7 @@ async def test_comparison():
 
         # Generate HTML report
         html = generate_html_report()
-        report_path = Path(__file__).resolve().parent.parent.parent / "test_report.html"
+        report_path = Path(__file__).resolve().parent.parent.parent.parent / "test_report.html"
         report_path.write_text(html, encoding="utf-8")
         print(f"  Report generated: {report_path}")
 

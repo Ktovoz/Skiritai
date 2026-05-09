@@ -1,0 +1,41 @@
+{
+  "execution_id": "default",
+  "phase": "done",
+  "perception_mode": "playwright",
+  "browser": {
+    "mode": "",
+    "cdp_port": null,
+    "pid": null,
+    "started_at": null,
+    "ws_endpoint": null
+  },
+  "store": {},
+  "current_step": null,
+  "completed_steps": [],
+  "failed_step": null,
+  "started_at": 1778361049.536614,
+  "finished_at": 1778361049.537382,
+  "elapsed_seconds": 0.0,
+  "phase_history": [
+    [
+      "idle",
+      1778361049.53574
+    ],
+    [
+      "setup",
+      1778361049.5365279
+    ],
+    [
+      "running",
+      1778361049.537023
+    ],
+    [
+      "teardown",
+      1778361049.537209
+    ],
+    [
+      "done",
+      1778361049.537319
+    ]
+  ]
+}

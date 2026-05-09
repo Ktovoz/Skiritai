@@ -13,7 +13,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest  # type: ignore
 
 # Ensure backend is on path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # ============================================================
 # 1. EventBus Tests
@@ -256,33 +255,30 @@ class TestAIContext:
                 asyncio.run(ctx.action("do something", mode="replay"))
 
     def test_generate_script_simple_actions(self):
-        from app.engine.ai_context import AIContext
+        from app.engine.script_generator import generate_replay_script
 
-        ctx = AIContext(page=MagicMock(), case_dir=Path("/tmp"), step_id="test")
         agent_steps = [
             {"action": "navigate", "args": {"url": "https://example.com"}},
             {"action": "click", "args": {"selector": "#btn"}},
             {"action": "fill", "args": {"selector": "#input", "text": "hello"}},
         ]
 
-        script = ctx._generate_script(agent_steps)
+        script = generate_replay_script("test", agent_steps)
         assert "async def run(page, context):" in script
         assert 'await page.goto("https://example.com")' in script
         assert 'await page.click("#btn")' in script
         assert 'await page.fill("#input", "hello")' in script
 
     def test_generate_script_empty_steps_produces_pass(self):
-        from app.engine.ai_context import AIContext
+        from app.engine.script_generator import generate_replay_script
 
-        ctx = AIContext(page=MagicMock(), case_dir=Path("/tmp"), step_id="test")
-        script = ctx._generate_script([])
+        script = generate_replay_script("test", [])
         assert "async def run(page, context):" in script
         assert "    pass" in script
 
     def test_generate_script_all_action_types(self):
-        from app.engine.ai_context import AIContext
+        from app.engine.script_generator import generate_replay_script
 
-        ctx = AIContext(page=MagicMock(), case_dir=Path("/tmp"), step_id="test")
         agent_steps = [
             {"action": "navigate", "args": {"url": "http://a.com"}},
             {"action": "click", "args": {"selector": "#b"}},
@@ -297,7 +293,7 @@ class TestAIContext:
             {"action": "hover", "args": {"selector": "#i"}},
         ]
 
-        script = ctx._generate_script(agent_steps)
+        script = generate_replay_script("test", agent_steps)
         assert 'await page.goto("http://a.com")' in script
         assert 'await page.click("#b")' in script
         assert 'await page.click("#c", force=True)' in script
@@ -415,14 +411,14 @@ class TestPyCaseRunner:
     def test_discover_case_class(self):
         from app.engine.py_case_runner import discover_case_class
 
-        case_dir = Path(__file__).resolve().parent.parent.parent / "cases" / "baidu_search"
+        case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search"
         cls = discover_case_class(case_dir)
         assert cls.__name__ == "BaiduSearchCase"
 
     def test_list_cases_returns_all(self):
         from app.engine.py_case_runner import list_cases
 
-        cases_root = Path(__file__).resolve().parent.parent.parent / "cases"
+        cases_root = Path(__file__).resolve().parent.parent.parent.parent / "cases"
         cases = list_cases(cases_root)
         assert len(cases) >= 4  # baidu_search, baidu_search_explore, baidu_search_replay, playwright_docs
 
@@ -433,7 +429,7 @@ class TestPyCaseRunner:
     def test_list_cases_structure(self):
         from app.engine.py_case_runner import list_cases
 
-        cases_root = Path(__file__).resolve().parent.parent.parent / "cases"
+        cases_root = Path(__file__).resolve().parent.parent.parent.parent / "cases"
         cases = list_cases(cases_root)
 
         for c in cases:
@@ -627,10 +623,10 @@ class TestAPI:
     def setup(self):
         from fastapi.testclient import TestClient
         from app.main import app
-        from app.routers.cases import _executions
+        from app.engine.execution_manager import _executions
         _executions.clear()
         self.client = TestClient(app)
-        self.cases_root = Path(__file__).resolve().parent.parent.parent / "cases"
+        self.cases_root = Path(__file__).resolve().parent.parent.parent.parent / "cases"
 
     def test_health(self):
         resp = self.client.get("/api/health")
@@ -845,6 +841,6 @@ if __name__ == "__main__":
     import subprocess
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
-        cwd=Path(__file__).resolve().parent.parent,
+        cwd=Path(__file__).resolve().parent.parent.parent,
     )
     sys.exit(result.returncode)
