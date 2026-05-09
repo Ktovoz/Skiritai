@@ -1,4 +1,4 @@
-"""Acceptance tests for TestAgent — end-to-end flows with mocked LLM/browser.
+"""Acceptance tests for Skiritai — end-to-end flows with mocked LLM/browser.
 
 These tests validate real-world scenarios: full case execution, step failure
 propagation, event sequencing, API lifecycle, script roundtrip, and edge cases.

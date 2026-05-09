@@ -1,4 +1,4 @@
-"""End-to-end tests for TestAgent — real browser, real page interactions.
+"""End-to-end tests for Skiritai — real browser, real page interactions.
 
 These tests spin up a local HTTP server, launch a real Chromium browser via
 Playwright, and exercise the full execution pipeline: case discovery, replay

@@ -1,149 +1,102 @@
-# TestAgent
+<div align="center">
 
-**AI-powered test automation framework** — let AI explore test paths and auto-generate replayable test scripts
+# Skiritai
+
+**AI-Powered Test Automation Agent**
+
+<em>Named after the Skiritai — Sparta's elite reconnaissance troops who scouted the path ahead of the main army.</em>
+
+<br>
+
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Playwright](https://img.shields.io/badge/Playwright-1.40+-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-19+-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README_zh.md)
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Playwright](https://img.shields.io/badge/Playwright-1.40+-green.svg)](https://playwright.dev/)
-[![LangGraph](https://img.shields.io/badge/LangGraph-1.0+-orange.svg)](https://langchain-ai.github.io/langgraph/)
+</div>
 
 ---
 
+## What is Skiritai?
+
+Skiritai is an AI-driven test automation framework that **scouts automation paths before executing them**.
+
+Like the ancient Skiritai who reconnoitered the terrain before the Spartan army advanced, Skiritai's agent first **explores** the target application — navigating pages, discovering UI elements, and figuring out the correct sequence of actions — then **generates replayable scripts** that can execute the same path at 30x speed without any AI inference.
+
+```
+Explore Mode (Scout the path)
+  AI Agent → analyze page → decide actions → generate scripts
+         ↓
+Replay Mode (Execute the proven path)
+  Script → direct execution → no AI needed → 30x faster
+```
+
 ## Key Features
 
-### Explore → Replay Loop
+| Feature | Description |
+|---------|-------------|
+| **Explore → Replay Loop** | AI explores and generates scripts on first run; replays them instantly on subsequent runs |
+| **30x Performance** | Replay mode skips AI inference entirely — 74s → 2.5s |
+| **Python-native Cases** | Define test cases as Python classes with `@step_mode` decorators |
+| **Auto-Solidification** | Successful explorations are automatically saved as replayable scripts |
+| **Multi-level Fallback** | `fill` → `click_force` → `eval_js` for resilient element interaction |
+| **Real-time Monitoring** | WebSocket-based live execution logs and event streaming |
+| **Flexible LLM** | Supports OpenAI, Anthropic, Qwen, and any compatible API |
+| **Web UI** | React + TypeScript dashboard for managing and monitoring test cases |
 
-The core concept: **"explore first, replay later"**:
-
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| **Explore** | AI analyzes the page, decides actions, generates replay scripts | First run, new feature verification |
-| **Replay** | Executes saved scripts directly, no AI reasoning | Regression testing, CI/CD integration |
-
-### How It Works
-
-`ai.action()` accepts an optional `mode` parameter to control execution:
-
-```python
-await ai.action("Navigate to Baidu")                    # auto (default)
-await ai.action("Navigate to Baidu", mode="auto")       # same as above
-await ai.action("Navigate to Baidu", mode="explore")    # force AI exploration
-await ai.action("Navigate to Baidu", mode="replay")     # force replay
-```
-
-| Mode | Behavior |
-|------|----------|
-| `auto` (default) | Replay if script exists, otherwise explore |
-| `explore` | Always use AI, overwrite existing script |
-| `replay` | Always replay, error if no script exists |
-
-**Default flow (`auto` mode):**
-
-```
-First run:
-  ai.action("Navigate to Baidu")  →  no script  →  AI explores  →  generates scripts/open_baidu.py
-
-Second run:
-  ai.action("Navigate to Baidu")  →  script exists  →  replay directly (no AI)
-```
-
-**Force re-explore** when replay result is unsatisfactory:
-
-```python
-# Re-explore this step even if a replay script already exists
-await ai.action("Navigate to Baidu", mode="explore")
-```
-
-### 30x Performance Boost
-
-Replay mode skips AI inference entirely:
-
-```
-Explore: 74.67s  (AI reasoning + tool calls + script generation)
-Replay:   2.47s  (direct script execution)
-Speedup: 30.3x
-```
-
-### Python-native Test Cases
-
-Define test cases as Python classes. Use `@step_mode` to set per-step execution mode:
+## How It Works
 
 ```python
 from app.engine.base_case import BaseCase, step_mode
 
-class BaiduSearchCase(BaseCase):
+class SearchTest(BaseCase):
     async def setup(self):
         await self.launch_browser()
 
     async def teardown(self):
         await self.close_browser()
 
-    async def open_baidu(self, ai):
-        await ai.action("Navigate to Baidu homepage")
+    async def open_site(self, ai):
+        await ai.action("Navigate to https://example.com")
 
-    @step_mode("explore")
-    async def search_keyword(self, ai):
-        await ai.action("Search for 'Playwright automation testing'")
+    @step_mode("explore")  # Force AI exploration for this step
+    async def search(self, ai):
+        await ai.action("Search for 'automation testing'")
 
-    async def verify_results(self, ai):
-        await ai.action("Verify search results loaded")
+    async def verify(self, ai):
+        await ai.action("Verify search results are displayed")
 ```
 
-You can also override mode directly in `ai.action()`:
-
-```python
-await ai.action("Navigate to Baidu", mode="explore")  # overrides @step_mode
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology | Description |
-|-------|------------|-------------|
-| **AI Engine** | LangGraph + LangChain | ReAct Agent pattern, autonomous tool calling |
-| **LLM** | OpenAI / Qwen / any compatible API | Flexible model switching |
-| **Browser Automation** | Playwright | Chrome, Firefox, Safari support |
-| **Backend** | FastAPI | High-performance async API |
-| **Frontend** | React + TypeScript + Vite | Modern UI |
-| **Storage** | File system | Scripts, results, reports all file-based |
-
----
-
-## Project Structure
+**First run** — AI explores each step, generates scripts:
 
 ```
-backend/
-├── app/
-│   ├── engine/
-│   │   ├── agent_loop.py      # LangGraph ReAct Agent
-│   │   ├── ai_context.py      # AI action context (explore/replay)
-│   │   ├── base_case.py       # Test case base class
-│   │   ├── py_case_runner.py  # Python case runner
-│   │   ├── tools.py           # Playwright tool set
-│   │   └── browser.py         # Browser configuration
-│   ├── routers/
-│   │   ├── cases.py           # Case API
-│   │   └── ws.py              # WebSocket real-time push
-│   └── main.py
-└── tests/
-    ├── test_py_case.py
-    └── test_replay_vs_explore.py
-cases/
-├── baidu_search/
-│   ├── case.py                # Test case definition
-│   └── scripts/               # Replay scripts
-└── playwright_docs/
-frontend/
-LICENSE
+[Step] open_site   (explore)  → 20s  → scripts/open_site.py   ✓
+[Step] search      (explore)  → 30s  → scripts/search.py      ✓
+[Step] verify      (explore)  → 24s  → scripts/verify.py      ✓
+Total: 74s
 ```
 
----
+**Second run** — scripts replay directly, no AI:
+
+```
+[Step] open_site   (replay)   → 0.8s → direct execution       ✓
+[Step] search      (replay)   → 0.8s → direct execution       ✓
+[Step] verify      (replay)   → 0.8s → direct execution       ✓
+Total: 2.5s
+```
 
 ## Quick Start
 
-### 1. Install Dependencies
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+ (for frontend)
+- An LLM API key (OpenAI / Anthropic / compatible provider)
+
+### 1. Install Backend
 
 ```bash
 cd backend
@@ -151,7 +104,7 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
-### 2. Configure Environment
+### 2. Configure
 
 ```bash
 # backend/.env
@@ -160,7 +113,7 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o
 ```
 
-### 3. Run a Test Case
+### 3. Run
 
 ```bash
 cd backend
@@ -173,22 +126,65 @@ asyncio.run(run_case(Path('../cases/baidu_search')))
 "
 ```
 
----
+### 4. (Optional) Start Web UI
 
-## Tools
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-TestAgent provides 13 Playwright tools:
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| AI Engine | LangGraph + LangChain (ReAct Agent) |
+| LLM | OpenAI / Anthropic / Qwen / any compatible API |
+| Browser Automation | Playwright |
+| Backend | FastAPI (async) |
+| Frontend | React + TypeScript + Vite |
+| Storage | File-based (scripts, results, reports) |
+
+## Project Structure
+
+```
+Skiritai/
+├── backend/
+│   ├── app/
+│   │   ├── engine/
+│   │   │   ├── agent_loop.py      # LangGraph ReAct Agent
+│   │   │   ├── ai_context.py      # Explore/Replay execution context
+│   │   │   ├── base_case.py       # Test case base class
+│   │   │   ├── py_case_runner.py  # Python case runner
+│   │   │   ├── tools.py           # Playwright tool set (14 tools)
+│   │   │   └── browser.py         # Browser lifecycle management
+│   │   ├── routers/
+│   │   │   ├── cases.py           # REST API for cases
+│   │   │   └── ws.py              # WebSocket real-time events
+│   │   └── main.py
+│   └── tests/
+├── cases/                          # Test case definitions
+│   ├── baidu_search/
+│   └── playwright_docs/
+├── frontend/                       # Web dashboard (React + TS)
+├── LICENSE
+└── README.md
+```
+
+## Tool Set
+
+14 Playwright tools available to the AI agent:
 
 | Tool | Description |
 |------|-------------|
 | `navigate` | Navigate to URL |
 | `click` | Click element |
-| `click_force` | Force click (hidden elements) |
+| `click_force` | Force click (for hidden elements) |
 | `fill` | Fill input field |
 | `type_text` | Type character by character |
 | `focus` | Focus on element |
-| `get_text` | Get element text |
-| `get_page_info` | Get page title, URL and text summary |
+| `get_text` | Get element text content |
+| `get_page_info` | Get page title, URL, and text summary |
 | `wait_for` | Wait for element to appear |
 | `scroll` | Scroll page |
 | `eval_js` | Execute JavaScript |
@@ -196,82 +192,34 @@ TestAgent provides 13 Playwright tools:
 | `hover` | Hover over element |
 | `screenshot` | Capture page screenshot |
 
----
+## Execution Modes
 
-## Core Advantages
+Control how each step executes via `ai.action()` or the `@step_mode` decorator:
 
-### 1. Intelligent Exploration
-
-AI Agent autonomously analyzes page structure and decides the best action path:
-
-```python
-await ai.action("Type keyword in search box and search")
-# AI may call: fill -> click, or eval_js, depending on page state
-```
-
-### 2. Auto-Solidification
-
-After successful exploration, a replay script is auto-generated for future reuse:
-
-```
-First run:  explore -> generates scripts/search_keyword.py
-Next run:   replay  -> directly executes scripts/search_keyword.py
-```
-
-### 3. Reliable
-
-- **Locator API**: Uses Playwright's auto-wait mechanism
-- **Multi-level fallback**: fill -> click_force -> eval_js
-- **Error recovery**: Single step failure doesn't affect other steps
-
-### 4. Easy to Extend
-
-Add new test cases by inheriting `BaseCase`:
+| Mode | Behavior | Use Case |
+|------|----------|----------|
+| `auto` (default) | Replay if script exists, otherwise explore | Most steps |
+| `explore` | Always use AI, overwrite existing script | New features, re-exploration |
+| `replay` | Always replay, error if no script | CI/CD regression |
 
 ```python
-from app.engine.base_case import BaseCase
+# Via decorator
+@step_mode("explore")
+async def my_step(self, ai):
+    await ai.action("...")
 
-class MyTestCase(BaseCase):
-    async def setup(self):
-        await self.launch_browser()
-
-    async def teardown(self):
-        await self.close_browser()
-
-    async def my_step(self, ai):
-        await ai.action("Execute custom operation")
+# Via parameter (overrides decorator)
+await ai.action("...", mode="replay")
 ```
 
----
+## Author
 
-## Benchmark: Explore vs Replay
-
-| Metric | Explore | Replay | Improvement |
-|--------|---------|--------|-------------|
-| Execution time | 74.67s | 2.47s | **30.3x** |
-| Time saved | - | 72.20s | - |
-| AI calls | Yes | No | - |
-| Scripts generated | 3 scripts | Direct execution | - |
-
-**Explore mode flow:**
-```
-[Step] open_baidu (explore)     -> 20s  -> generates scripts/open_baidu.py
-[Step] search_keyword (explore) -> 30s  -> generates scripts/search_keyword.py
-[Step] verify_results (explore) -> 24s  -> generates scripts/verify_results.py
-```
-
-**Replay mode flow:**
-```
-[Step] open_baidu (replay)     -> 0.8s -> direct script execution
-[Step] search_keyword (replay) -> 0.8s -> direct script execution
-[Step] verify_results (replay) -> 0.8s -> direct script execution
-```
-
----
+**Joe Shen** (Ktovoz)
+- GitHub: [@Ktovoz](https://github.com/Ktovoz)
 
 ## License
 
-MIT License
+[MIT](LICENSE)
 
 ## Contributing
 

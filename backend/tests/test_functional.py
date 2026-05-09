@@ -1,4 +1,4 @@
-"""Functional tests for TestAgent — no browser/LLM required."""
+"""Functional tests for Skiritai — no browser/LLM required."""
 from __future__ import annotations
 
 import asyncio
