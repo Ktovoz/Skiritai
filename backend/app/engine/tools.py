@@ -1,26 +1,28 @@
 """Playwright tools for LangGraph agent — text only, no vision."""
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from app.engine.tool_registry import register_tool
-from app.logger import logger
 
-# Module-level page reference, set by CaseRunner before invoking agent
-_page: Any = None
+import contextvars
+
+_page_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_page_ctx", default=None)
 
 
 def set_page(page: Any):
     """Set the active Playwright page for tools to use."""
-    global _page
-    _page = page
+    _page_ctx.set(page)
 
 
 def get_page() -> Any:
     """Get the active Playwright page."""
-    if _page is None:
+    page = _page_ctx.get()
+    if page is None:
         raise RuntimeError("Page not initialized. Call set_page() first.")
-    return _page
+    return page
 
 
 @register_tool
@@ -192,6 +194,6 @@ async def screenshot(name: str = "screenshot") -> str:
         name: 截图文件名（不含扩展名），默认 'screenshot'
     """
     page = get_page()
-    path = f"/tmp/testagent_{name}.png"
+    path = str(Path(tempfile.gettempdir()) / f"testagent_{name}.png")
     await page.screenshot(path=path, full_page=True)
     return f"截图已保存到 {path}"

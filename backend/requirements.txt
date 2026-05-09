@@ -7,7 +7,7 @@ langgraph>=1.0.0
 playwright>=1.40.0
 python-dotenv
 loguru
-pyyaml
+browser-use>=0.12.0
 
 # Optional providers (install as needed):
 # langchain-anthropic>=0.3.0

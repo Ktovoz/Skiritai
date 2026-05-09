@@ -8,25 +8,34 @@ from langgraph.prebuilt import create_react_agent
 from app.engine.event_bus import Event, event_bus
 from app.engine.llm import get_provider
 from app.engine.tool_registry import ToolRegistry
-import app.engine.tools  # triggers tool registration via @register_tool
+import app.engine.tools  # triggers Playwright tool registration
+import app.engine.perception  # triggers perception tool registration
 from app.engine.tools import set_page
 from app.logger import logger
+
+# Tools that are read-only perception — excluded from replay scripts
+PERCEPTION_TOOLS = {"page_perceive", "find_element"}
 
 SYSTEM_PROMPT = """你是一个浏览器自动化测试 Agent。你通过调用工具来操作浏览器完成测试任务。
 
 工作流程：
-1. 用 get_page_info 获取当前页面状态
-2. 分析页面文本和结构，决定下一步操作
-3. 调用相应工具执行操作
-4. 用 get_text 或 get_page_info 确认操作结果
-5. 重复直到任务完成
+1. 用 page_perceive 深度分析页面 DOM 结构，了解所有可交互元素
+2. 如果需要查找特定元素，用 find_element 自然语言搜索
+3. 用 get_page_info 获取页面标题和 URL
+4. 根据感知结果，调用操作工具（click、fill、navigate 等）执行操作
+5. 操作后再用 page_perceive 或 get_page_info 验证结果
+6. 重复直到任务完成
+
+元素定位策略（按优先级）：
+- 优先用 page_perceive 获取完整页面结构，它会返回每个元素的精确 CSS 选择器
+- 用 find_element("描述") 模糊搜索元素，返回最佳匹配的选择器
+- 也可以直接用 CSS 选择器，如 '#id', '.class', 'text=文本'
 
 重要规则：
-- 用 get_page_info 获取页面标题、URL 和文本摘要来了解页面状态
-- 用 get_text 获取特定元素的文本内容
-- 如果元素找不到，尝试用 wait_for 等待
+- 每次进入新页面或操作后，先用感知工具了解当前状态
+- 感知工具（page_perceive、find_element）是只读的，不会修改页面
+- 如果元素找不到，用 page_perceive 重新分析页面
 - 如果操作失败，分析原因并重试或换一种方式
-- 用 CSS 选择器定位元素，如 '#id', '.class', 'text=文本'
 - 当任务完成时，直接用自然语言总结结果即可
 """
 
@@ -37,7 +46,7 @@ def _build_llm():
 
 
 def build_agent():
-    """Build a LangGraph ReAct agent with Playwright tools."""
+    """Build a LangGraph ReAct agent with Playwright tools + perception tools."""
     llm = _build_llm()
     registry = ToolRegistry()
     tools = registry.get_all()

@@ -1,12 +1,11 @@
 """AI Action context - manages replay scripts and agent execution."""
 from __future__ import annotations
 
-import importlib.util
+import re
 from pathlib import Path
 from typing import Any, Callable, Literal
 
-from app.engine.agent_loop import run_agent
-from app.engine.tools import set_page
+from app.engine.agent_loop import run_agent, PERCEPTION_TOOLS
 from app.logger import logger
 
 ActionMode = Literal["auto", "explore", "replay"]
@@ -84,13 +83,10 @@ class AIContext:
         logger.info(f"[Replay] {self.step_id}: executing {self.script_path}")
 
         try:
-            # Read and execute the script directly
             script_content = self.script_path.read_text(encoding="utf-8")
 
-            # Create execution context
-            exec_globals = {
-                "page": self.page,
-                "context": self.page.context,
+            exec_globals: dict[str, Any] = {
+                "__builtins__": __builtins__,
             }
 
             # Execute the script
@@ -127,7 +123,6 @@ class AIContext:
         )
 
         if result.get("success"):
-            # Generate and save replay script
             script = self._generate_script(result.get("steps", []))
             self.script_path.write_text(script, encoding="utf-8")
             logger.info(f"[Explore] {self.step_id}: script saved to {self.script_path}")
@@ -135,48 +130,55 @@ class AIContext:
         return result
 
     def _generate_script(self, agent_steps: list[dict]) -> str:
-        """Generate a replay script from agent's tool-calling history."""
-        lines = [
-            f"# Auto-generated replay script",
-            f"# Step: {self.step_id}",
-            f"",
-            f"async def run(page, context):",
+        """Generate a standalone replay script from agent's tool-calling history.
+
+        The generated script:
+        - Can be run independently: python <script>.py
+        - Can be imported and run via: await run(page, context)
+        - Filters out perception tools (page_perceive, find_element, get_page_info)
+        - Includes proper imports and a __main__ block
+        """
+        # Filter out read-only / perception steps
+        action_steps = [
+            s for s in agent_steps
+            if s.get("action") not in PERCEPTION_TOOLS
+            and s.get("action") not in ("get_page_info", "get_text", "response")
         ]
 
         action_lines = []
-        for step in agent_steps:
+        for step in action_steps:
             action = step.get("action", "")
             args = step.get("args", {})
 
             if action == "navigate":
-                url = args.get("url", "")
+                url = _escape_str(args.get("url", ""))
                 action_lines.append(f'    await page.goto("{url}")')
                 action_lines.append(f'    await page.wait_for_load_state("networkidle")')
 
             elif action == "click":
-                selector = args.get("selector", "")
+                selector = _escape_str(args.get("selector", ""))
                 action_lines.append(f'    await page.click("{selector}")')
 
             elif action == "click_force":
-                selector = args.get("selector", "")
+                selector = _escape_str(args.get("selector", ""))
                 action_lines.append(f'    await page.click("{selector}", force=True)')
 
             elif action == "fill":
-                selector = args.get("selector", "")
-                text = args.get("text", "")
+                selector = _escape_str(args.get("selector", ""))
+                text = _escape_str(args.get("text", ""))
                 action_lines.append(f'    await page.fill("{selector}", "{text}")')
 
             elif action == "type_text":
-                selector = args.get("selector", "")
-                text = args.get("text", "")
+                selector = _escape_str(args.get("selector", ""))
+                text = _escape_str(args.get("text", ""))
                 action_lines.append(f'    await page.locator("{selector}").press_sequentially("{text}")')
 
             elif action == "focus":
-                selector = args.get("selector", "")
+                selector = _escape_str(args.get("selector", ""))
                 action_lines.append(f'    await page.locator("{selector}").focus()')
 
             elif action == "wait_for":
-                selector = args.get("selector", "")
+                selector = _escape_str(args.get("selector", ""))
                 timeout = args.get("timeout", 5000)
                 action_lines.append(f'    await page.wait_for_selector("{selector}", timeout={timeout})')
 
@@ -187,23 +189,56 @@ class AIContext:
                 action_lines.append(f'    await page.mouse.wheel(0, {y})')
 
             elif action == "eval_js":
-                expression = args.get("expression", "")
-                # Escape quotes in the expression
-                escaped = expression.replace('"', '\\"')
-                action_lines.append(f'    await page.evaluate("{escaped}")')
+                expression = _escape_str(args.get("expression", ""))
+                action_lines.append(f'    result = await page.evaluate("{expression}")')
 
             elif action == "select_option":
-                selector = args.get("selector", "")
-                value = args.get("value", "")
+                selector = _escape_str(args.get("selector", ""))
+                value = _escape_str(args.get("value", ""))
                 action_lines.append(f'    await page.select_option("{selector}", "{value}")')
 
             elif action == "hover":
-                selector = args.get("selector", "")
+                selector = _escape_str(args.get("selector", ""))
                 action_lines.append(f'    await page.hover("{selector}")')
+
+            elif action == "screenshot":
+                name = _escape_str(args.get("name", "screenshot"))
+                action_lines.append(f'    await page.screenshot(path="{name}.png", full_page=True)')
 
         # If no actionable steps, add a pass statement
         if not action_lines:
             action_lines.append("    pass")
 
+        # Build the full standalone script
+        lines = [
+            '"""Auto-generated replay script — can be run independently."""',
+            "import asyncio",
+            "from playwright.async_api import async_playwright",
+            "",
+            "",
+            "async def run(page, context):",
+        ]
         lines.extend(action_lines)
+        lines.extend([
+            "",
+            "",
+            'if __name__ == "__main__":',
+            "    async def main():",
+            "        pw = await async_playwright().start()",
+            "        browser = await pw.chromium.launch(headless=False)",
+            "        ctx = await browser.new_context()",
+            "        page = await ctx.new_page()",
+            "        try:",
+            "            await run(page, ctx)",
+            "        finally:",
+            "            await browser.close()",
+            "            await pw.stop()",
+            "",
+            "    asyncio.run(main())",
+        ])
         return "\n".join(lines)
+
+
+def _escape_str(s: str) -> str:
+    """Escape a string for safe embedding in a Python source literal."""
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
