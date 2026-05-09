@@ -7,6 +7,8 @@ import json
 import os
 import sys
 import tempfile
+
+import pytest
 from pathlib import Path
 
 # Ensure backend/ is on sys.path
@@ -263,13 +265,15 @@ def test_replay_script_standalone():
 
 # ─── Test 6: LLM API connectivity ─────────────────────────────────────
 
+@pytest.mark.skipif(
+    not os.environ.get("OPENAI_API_KEY"),
+    reason="OPENAI_API_KEY not set (required for live API test)"
+)
 def test_llm_api():
     """Test that the configured LLM API is reachable (reads from .env)."""
     api_key = os.environ.get("OPENAI_API_KEY", "")
     base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
     model = os.environ.get("LLM_MODEL", "gpt-4o")
-
-    assert api_key, "OPENAI_API_KEY not set (check .env)"
 
     from langchain_openai import ChatOpenAI
 
@@ -289,6 +293,10 @@ def test_llm_api():
 
 # ─── Test 7: Agent loop builds correctly with perception tools ────────
 
+@pytest.mark.skipif(
+    not (os.environ.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")),
+    reason="No LLM API key configured (required for agent build)"
+)
 def test_agent_builds():
     """Verify agent can be built with all tools including perception."""
     from app.engine.agent_loop import build_agent
