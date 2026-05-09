@@ -8,8 +8,6 @@ from langgraph.prebuilt import create_react_agent
 from app.engine.event_bus import Event, event_bus
 from app.engine.llm import get_provider
 from app.engine.tool_registry import ToolRegistry
-import app.engine.tools  # triggers Playwright tool registration
-import app.engine.perception  # triggers perception tool registration
 from app.engine.tools import set_page
 from app.logger import logger
 
@@ -38,6 +36,16 @@ SYSTEM_PROMPT = """你是一个浏览器自动化测试 Agent。你通过调用�
 - 如果操作失败，分析原因并重试或换一种方式
 - 当任务完成时，直接用自然语言总结结果即可
 """
+
+
+def register_all_tools() -> None:
+    """Explicitly register all tool modules.
+
+    Must be called once at startup (or before building the agent).
+    This replaces relying on import side-effects.
+    """
+    import app.engine.tools        # registers 14 Playwright action tools
+    import app.engine.perception   # registers 2 DOM perception tools
 
 
 def _build_llm():

@@ -176,8 +176,8 @@ class BaseCase:
             self._pw, self._case_dir
         )
         # Restore CDP port from session file
-        from app.engine.browser import _load_session
-        session = _load_session(self._case_dir)
+        from app.engine.browser import load_session
+        session = load_session(self._case_dir)
         if session:
             self._ctx.browser.cdp_port = session.get("cdp_port")
             self._ctx.browser.pid = session.get("pid")

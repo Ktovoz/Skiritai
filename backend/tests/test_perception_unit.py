@@ -152,141 +152,113 @@ def test_perception_tools_set():
 # ─── Test 4: Replay script generation ─────────────────────────────────
 
 def test_replay_script_generation():
-    from app.engine.ai_context import AIContext
+    from app.engine.script_generator import generate_replay_script
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        ctx = AIContext(
-            page=None,
-            case_dir=Path(tmpdir),
-            step_id="test_step",
-        )
+    # Simulate agent steps including perception tools
+    agent_steps = [
+        {"action": "page_perceive", "args": {}},         # should be filtered
+        {"action": "find_element", "args": {"description": "search"}},  # filtered
+        {"action": "navigate", "args": {"url": "https://www.baidu.com"}},
+        {"action": "get_page_info", "args": {}},          # filtered
+        {"action": "fill", "args": {"selector": "#kw", "text": "hello world"}},
+        {"action": "click", "args": {"selector": "#su"}},
+        {"action": "page_perceive", "args": {}},          # filtered
+        {"action": "get_text", "args": {"selector": ".result"}},  # filtered
+        {"action": "response", "content": "done"},         # filtered
+    ]
 
-        # Simulate agent steps including perception tools
-        agent_steps = [
-            {"action": "page_perceive", "args": {}},         # should be filtered
-            {"action": "find_element", "args": {"description": "search"}},  # filtered
-            {"action": "navigate", "args": {"url": "https://www.baidu.com"}},
-            {"action": "get_page_info", "args": {}},          # filtered
-            {"action": "fill", "args": {"selector": "#kw", "text": "hello world"}},
-            {"action": "click", "args": {"selector": "#su"}},
-            {"action": "page_perceive", "args": {}},          # filtered
-            {"action": "get_text", "args": {"selector": ".result"}},  # filtered
-            {"action": "response", "content": "done"},         # filtered
-        ]
+    script = generate_replay_script("test_step", agent_steps)
 
-        script = ctx._generate_script(agent_steps)
+    # Verify header
+    assert "async def run(page, context):" in script
+    assert "import asyncio" in script
+    assert "from playwright.async_api import async_playwright" in script
+    assert '__name__ == "__main__"' in script
 
-        # Verify header
-        assert "async def run(page, context):" in script
-        assert "import asyncio" in script
-        assert "from playwright.async_api import async_playwright" in script
-        assert '__name__ == "__main__"' in script
+    # Verify action steps are present
+    assert 'page.goto("https://www.baidu.com")' in script
+    assert 'page.fill("#kw", "hello world")' in script
+    assert 'page.click("#su")' in script
 
-        # Verify action steps are present
-        assert 'page.goto("https://www.baidu.com")' in script
-        assert 'page.fill("#kw", "hello world")' in script
-        assert 'page.click("#su")' in script
+    # Verify perception steps are NOT present
+    assert "page_perceive" not in script
+    assert "find_element" not in script
+    assert "get_page_info" not in script
 
-        # Verify perception steps are NOT present
-        assert "page_perceive" not in script
-        assert "find_element" not in script
-        assert "get_page_info" not in script
+    # Verify standalone execution block
+    assert "asyncio.run(main())" in script
 
-        # Verify standalone execution block
-        assert "asyncio.run(main())" in script
-
-        print("[PASS] test_replay_script_generation")
-        print("--- Generated script ---")
-        print(script)
-        print("--- End ---")
+    print("[PASS] test_replay_script_generation")
+    print("--- Generated script ---")
+    print(script)
+    print("--- End ---")
 
 
 def test_replay_script_escape():
     """Test that special characters are properly escaped."""
-    from app.engine.ai_context import AIContext
+    from app.engine.script_generator import generate_replay_script
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        ctx = AIContext(
-            page=None,
-            case_dir=Path(tmpdir),
-            step_id="escape_test",
-        )
+    agent_steps = [
+        {"action": "navigate", "args": {"url": "https://example.com/search?q=\"hello\"&page=1"}},
+        {"action": "fill", "args": {"selector": "#input", "text": "line1\nline2"}},
+        {"action": "eval_js", "args": {"expression": "document.querySelector(\"#btn\")"}},
+    ]
 
-        agent_steps = [
-            {"action": "navigate", "args": {"url": "https://example.com/search?q=\"hello\"&page=1"}},
-            {"action": "fill", "args": {"selector": "#input", "text": "line1\nline2"}},
-            {"action": "eval_js", "args": {"expression": "document.querySelector(\"#btn\")"}},
-        ]
+    script = generate_replay_script("escape_test", agent_steps)
 
-        script = ctx._generate_script(agent_steps)
+    # Verify the script is syntactically valid Python
+    try:
+        compile(script, "<replay_script>", "exec")
+    except SyntaxError as e:
+        print(f"[FAIL] Script has syntax error: {e}")
+        print(script)
+        raise
 
-        # Verify the script is syntactically valid Python
-        try:
-            compile(script, "<replay_script>", "exec")
-        except SyntaxError as e:
-            print(f"[FAIL] Script has syntax error: {e}")
-            print(script)
-            raise
-
-        print("[PASS] test_replay_script_escape: special chars handled correctly")
+    print("[PASS] test_replay_script_escape: special chars handled correctly")
 
 
 def test_replay_script_empty_steps():
     """Test that empty steps produce a valid pass script."""
-    from app.engine.ai_context import AIContext
+    from app.engine.script_generator import generate_replay_script
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        ctx = AIContext(
-            page=None,
-            case_dir=Path(tmpdir),
-            step_id="empty_test",
-        )
+    # Only perception/read-only steps → no action steps
+    agent_steps = [
+        {"action": "page_perceive", "args": {}},
+        {"action": "get_page_info", "args": {}},
+        {"action": "response", "content": "nothing to do"},
+    ]
 
-        # Only perception/read-only steps → no action steps
-        agent_steps = [
-            {"action": "page_perceive", "args": {}},
-            {"action": "get_page_info", "args": {}},
-            {"action": "response", "content": "nothing to do"},
-        ]
+    script = generate_replay_script("empty_test", agent_steps)
+    assert "pass" in script
 
-        script = ctx._generate_script(agent_steps)
-        assert "pass" in script
+    # Should still be valid Python
+    compile(script, "<replay_script>", "exec")
 
-        # Should still be valid Python
-        compile(script, "<replay_script>", "exec")
-
-        print("[PASS] test_replay_script_empty_steps")
+    print("[PASS] test_replay_script_empty_steps")
 
 
 # ─── Test 5: Replay script can actually run independently ──────────────
 
 def test_replay_script_standalone():
     """Verify the generated script is importable and the run() function exists."""
-    from app.engine.ai_context import AIContext
+    from app.engine.script_generator import generate_replay_script
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        ctx = AIContext(
-            page=None,
-            case_dir=Path(tmpdir),
-            step_id="standalone_test",
-        )
+    agent_steps = [
+        {"action": "navigate", "args": {"url": "https://example.com"}},
+        {"action": "click", "args": {"selector": "#btn"}},
+    ]
 
-        agent_steps = [
-            {"action": "navigate", "args": {"url": "https://example.com"}},
-            {"action": "click", "args": {"selector": "#btn"}},
-        ]
+    script = generate_replay_script("standalone_test", agent_steps)
 
-        script = ctx._generate_script(agent_steps)
+    # Execute the script and check that `run` function is defined
+    exec_globals: dict = {"__builtins__": __builtins__}
+    exec(script, exec_globals)
+    assert "run" in exec_globals
+    assert callable(exec_globals["run"])
+    assert "asyncio" in exec_globals  # imports are present
+    assert "async_playwright" in exec_globals
 
-        # Execute the script and check that `run` function is defined
-        exec_globals: dict = {"__builtins__": __builtins__}
-        exec(script, exec_globals)
-        assert "run" in exec_globals
-        assert callable(exec_globals["run"])
-        assert "asyncio" in exec_globals  # imports are present
-        assert "async_playwright" in exec_globals
-
-        print("[PASS] test_replay_script_standalone: run() function importable")
+    print("[PASS] test_replay_script_standalone: run() function importable")
 
 
 # ─── Test 6: LLM API connectivity ─────────────────────────────────────
@@ -309,7 +281,7 @@ def test_llm_api():
         max_tokens=100,
     )
 
-    response = llm.invoke("Reply with the word hello only")
+    response = llm.invoke("What is 2 plus 3? Reply with just the number.")
     content = response.content or ""
     assert content.strip(), f"Empty response from {model} at {base_url}"
     print(f"[PASS] test_llm_api: model={model}, response={content[:80]}")
