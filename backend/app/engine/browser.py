@@ -114,8 +114,8 @@ def _wait_for_cdp(port: int, timeout: float = 10.0) -> bool:
                 data = json.loads(resp.read().decode("utf-8"))
                 if data.get("webSocketDebuggerUrl"):
                     return True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[Browser] CDP not ready on port {port}: {e}")
         time.sleep(0.3)
     return False
 
