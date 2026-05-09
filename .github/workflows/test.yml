@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [main, dev]
 
+# Inject secrets as env vars for LLM-dependent tests
+env:
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+  LLM_MODEL: ${{ secrets.LLM_MODEL }}
+  CI: "true"
+
 jobs:
   # ============================================================
   # Unit tests: 纯逻辑测试，不需要外部依赖，最快反馈
@@ -38,7 +47,7 @@ jobs:
 
       - name: Run unit tests
         working-directory: backend
-        run: python -m pytest tests/unit/ -v --tb=short
+        run: python -m pytest tests/unit/ -v -s --tb=short
 
   # ============================================================
   # Functional + Acceptance: Agent 逻辑 + 脚本级验证
@@ -71,11 +80,11 @@ jobs:
 
       - name: Run functional tests
         working-directory: backend
-        run: python -m pytest tests/functional/ -v --tb=short
+        run: python -m pytest tests/functional/ -v -s --tb=short
 
       - name: Run acceptance tests
         working-directory: backend
-        run: python -m pytest tests/acceptance/ -v --tb=short
+        run: python -m pytest tests/acceptance/ -v -s --tb=short
 
   # ============================================================
   # E2E: 真实浏览器测试 (Playwright Chromium headless)
@@ -119,7 +128,7 @@ jobs:
         working-directory: backend
         env:
           HEADLESS: "true"
-        run: python -m pytest tests/e2e/ -v --tb=short
+        run: python -m pytest tests/e2e/ -v -s --tb=short
 
   # ============================================================
   # Coverage: 汇总覆盖率报告（在所有测试完成后运行）
@@ -171,7 +180,7 @@ jobs:
             --cov-report=term \
             --cov-report=html \
             --cov-report=xml \
-            -v --tb=short
+            -v -s --tb=short
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

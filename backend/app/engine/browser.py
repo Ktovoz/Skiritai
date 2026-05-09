@@ -1,9 +1,11 @@
 """Browser configuration - use local Chrome installation."""
+import atexit
 import json
 import os
 import signal
 import socket
 import subprocess
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -11,6 +13,41 @@ from app.logger import logger
 
 # File that stores the browser session info for persistent sessions
 SESSION_FILE = ".browser_session"
+
+# Registry of launched PIDs for atexit cleanup
+_launched_pids: list[int] = []
+_launched_pids_lock = threading.Lock()
+
+
+def _atexit_cleanup() -> None:
+    """Kill any browser subprocesses that are still alive when Python exits."""
+    with _launched_pids_lock:
+        for pid in _launched_pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+                logger.info(f"[Browser] atexit: killed orphan browser pid={pid}")
+            except OSError:
+                pass
+        _launched_pids.clear()
+
+
+# Register cleanup on normal interpreter exit
+atexit.register(_atexit_cleanup)
+
+
+def _register_pid(pid: int) -> None:
+    """Track a launched browser PID for cleanup."""
+    with _launched_pids_lock:
+        _launched_pids.append(pid)
+
+
+def _unregister_pid(pid: int) -> None:
+    """Remove a PID from tracking (e.g., after explicit kill)."""
+    with _launched_pids_lock:
+        try:
+            _launched_pids.remove(pid)
+        except ValueError:
+            pass
 
 
 def get_launch_args() -> dict:
@@ -20,9 +57,13 @@ def get_launch_args() -> dict:
     Reads CHROME_PATH env var for custom Chrome executable path.
     """
     headless = os.getenv("HEADLESS", "false").lower() in ("true", "1", "yes")
+    in_ci = os.getenv("CI", "").lower() in ("true", "1")
+    chrome_args = ["--disable-blink-features=AutomationControlled"]
+    if in_ci:
+        chrome_args.append("--no-sandbox")
     args: dict = {
         "headless": headless,
-        "args": ["--disable-blink-features=AutomationControlled"],
+        "args": chrome_args,
     }
     chrome_path = os.getenv("CHROME_PATH")
     if chrome_path:
@@ -65,7 +106,7 @@ def is_browser_alive(case_dir: Path) -> bool:
 
     Returns True only if both the session file exists AND the process is alive.
     """
-    session = _load_session(case_dir)
+    session = load_session(case_dir)
     if not session:
         return False
     pid = session.get("pid")
@@ -161,6 +202,9 @@ async def launch_browser_server(pw, case_dir: Path):
     # Persist session info
     _save_session(case_dir, cdp_port, proc.pid)
 
+    # Register PID for atexit cleanup (prevents orphan processes on crash)
+    _register_pid(proc.pid)
+
     # Connect via Playwright CDP
     browser = await pw.chromium.connect_over_cdp(f"http://127.0.0.1:{cdp_port}")
     context = browser.contexts[0] if browser.contexts else await browser.new_context()
@@ -184,7 +228,7 @@ async def connect_to_browser(pw, case_dir: Path):
         FileNotFoundError: if no session file exists
         ConnectionError: if the browser process is dead
     """
-    session = _load_session(case_dir)
+    session = load_session(case_dir)
     if not session:
         raise FileNotFoundError(
             f"No persisted browser session found in {case_dir}. "
@@ -224,7 +268,7 @@ def kill_browser(case_dir: Path) -> bool:
 
     Returns True if a process was killed, False if no session was found.
     """
-    session = _load_session(case_dir)
+    session = load_session(case_dir)
     if not session:
         return False
 
@@ -235,6 +279,8 @@ def kill_browser(case_dir: Path) -> bool:
             logger.info(f"[Browser] Sent SIGTERM to browser pid={pid}")
         except OSError:
             pass  # already dead
+        finally:
+            _unregister_pid(pid)
 
     cleanup_session(case_dir)
     return True
