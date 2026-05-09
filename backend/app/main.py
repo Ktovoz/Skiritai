@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.logger import logger
 from app.routers import cases, ws
 
-app = FastAPI(title="TestAgent", description="测试智能体编排系统")
+app = FastAPI(title="Skiritai", description="AI 驱动的测试自动化智能体")
 
 cors_origins_str = os.getenv(
     "CORS_ALLOWED_ORIGINS",

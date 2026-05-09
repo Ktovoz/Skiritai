@@ -165,7 +165,7 @@ def generate_html_report():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TestAgent 探索模式 vs 回放模式 对比报告</title>
+    <title>Skiritai 探索模式 vs 回放模式 对比报告</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; padding: 20px; }}
@@ -206,7 +206,7 @@ def generate_html_report():
 <body>
     <div class="container">
         <div class="header">
-            <h1>TestAgent 探索模式 vs 回放模式 对比报告</h1>
+            <h1>Skiritai 探索模式 vs 回放模式 对比报告</h1>
             <div class="timestamp">生成时间: {report_data['timestamp']}</div>
         </div>
 
