@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  Button, Card, Descriptions, List, Tag, Space, message, Typography, Collapse, Image,
+  Button, Card, Descriptions, List, Tag, Space, message, Typography, Collapse, Image, Spin,
 } from 'antd'
 import {
-  ArrowLeftOutlined, PlayCircleOutlined, ReloadOutlined,
+  ArrowLeftOutlined, PlayCircleOutlined, ReloadOutlined, StopOutlined,
 } from '@ant-design/icons'
 import { caseApi } from '../../services/api'
 import { createCaseWS } from '../../services/websocket'
@@ -47,6 +47,16 @@ export default function CaseDetail() {
     loadCase()
     loadResults()
   }, [loadCase, loadResults])
+
+  const handleStop = async () => {
+    if (!caseId) return
+    try {
+      await caseApi.stop(caseId)
+      message.info('已发送停止指令')
+    } catch {
+      message.error('停止失败')
+    }
+  }
 
   const handleRun = async () => {
     if (!caseId) return
@@ -99,7 +109,7 @@ export default function CaseDetail() {
     }
   }
 
-  if (!caseData) return null
+  if (!caseData) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />
 
   return (
     <div style={{ padding: 24 }}>
@@ -115,6 +125,15 @@ export default function CaseDetail() {
         >
           {running ? '执行中...' : '执行'}
         </Button>
+        {running && (
+          <Button
+            danger
+            icon={<StopOutlined />}
+            onClick={handleStop}
+          >
+            停止
+          </Button>
+        )}
       </Space>
 
       <Card title={caseData.name} style={{ marginBottom: 16 }}>
@@ -235,9 +254,16 @@ export default function CaseDetail() {
                 {r.screenshots && r.screenshots.length > 0 && (
                   <div style={{ marginTop: 8 }}>
                     <Text strong>截图: </Text>
-                    {r.screenshots.map(s => (
-                      <Tag key={s}>{s}</Tag>
-                    ))}
+                    <Image.PreviewGroup>
+                      {r.screenshots.map(s => (
+                        <Image
+                          key={s}
+                          width={200}
+                          src={`/api/cases/${caseId}/results/${r.timestamp}/screenshots/${s}.png`}
+                          alt={s}
+                        />
+                      ))}
+                    </Image.PreviewGroup>
                   </div>
                 )}
               </Collapse.Panel>

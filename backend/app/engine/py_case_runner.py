@@ -4,7 +4,6 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Any
 
 from app.engine.base_case import BaseCase
 from app.logger import logger

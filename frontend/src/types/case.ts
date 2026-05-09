@@ -38,7 +38,7 @@ export interface StepResult {
 export interface ExecutionReport {
   case_id: string
   case_name: string
-  status: 'completed' | 'failed'
+  status: 'completed' | 'failed' | 'cancelled' | 'error'
   total_steps: number
   success_count: number
   failed_count: number

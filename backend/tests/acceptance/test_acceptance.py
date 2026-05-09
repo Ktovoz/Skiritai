@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Ensure backend is on path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 # Cleanup leaked scripts from tests/scripts/ before each test module runs
@@ -638,7 +637,7 @@ class TestAPILifecycle:
     def setup_client(self):
         from fastapi.testclient import TestClient
         from app.main import app
-        from app.routers.cases import _executions
+        from app.engine.execution_manager import _executions
         _executions.clear()
         self.client = TestClient(app)
 
@@ -734,7 +733,7 @@ class TestAPILifecycle:
         assert resp3.json()["status"] == "solidified"
 
         # Verify marker
-        cases_root = Path(__file__).resolve().parent.parent.parent / "cases"
+        cases_root = Path(__file__).resolve().parent.parent.parent.parent / "cases"
         marker = cases_root / target_case / "scripts" / f".{target_step}.solidified"
         assert marker.exists()
 
@@ -747,7 +746,7 @@ class TestAPILifecycle:
 
     def test_run_cancels_previous_execution(self):
         """Starting a new run for the same case cancels the previous one."""
-        from app.routers.cases import _executions
+        from app.engine.execution_manager import _executions
 
         call_count = 0
 
@@ -769,7 +768,7 @@ class TestAPILifecycle:
 
     def test_stop_cancels_registered_task(self):
         """_cancel_execution correctly cancels and removes a registered task."""
-        from app.routers.cases import _cancel_execution, _executions
+        from app.engine.execution_manager import cancel_execution as _cancel_execution, _executions
 
         async def _test():
             async def dummy():
@@ -1012,20 +1011,18 @@ class TestEdgeCases:
 
     def test_generate_script_scroll_up_direction(self):
         """Script generation handles scroll up correctly."""
-        from app.engine.ai_context import AIContext
+        from app.engine.script_generator import generate_replay_script
 
-        ctx = AIContext(page=MagicMock(), case_dir=Path("/tmp"), step_id="test")
         steps = [{"action": "scroll", "args": {"direction": "up", "amount": 300}}]
-        script = ctx._generate_script(steps)
+        script = generate_replay_script("test", steps)
         assert "await page.mouse.wheel(0, -300)" in script
 
     def test_generate_script_eval_js_escapes_quotes(self):
         """Script generation properly escapes quotes in JS expressions."""
-        from app.engine.ai_context import AIContext
+        from app.engine.script_generator import generate_replay_script
 
-        ctx = AIContext(page=MagicMock(), case_dir=Path("/tmp"), step_id="test")
         steps = [{"action": "eval_js", "args": {"expression": 'document.querySelector("div").click()'}}]
-        script = ctx._generate_script(steps)
+        script = generate_replay_script("test", steps)
         assert '\\"' in script  # quotes should be escaped
 
     def test_result_report_step_mode_field(self):
@@ -1060,6 +1057,6 @@ if __name__ == "__main__":
     import subprocess
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
-        cwd=Path(__file__).resolve().parent.parent,
+        cwd=Path(__file__).resolve().parent.parent.parent,
     )
     sys.exit(result.returncode)

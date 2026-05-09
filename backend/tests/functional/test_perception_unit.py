@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 # Ensure backend/ is on sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 # ─── Test 1: CaseContext state machine ────────────────────────────────
 
@@ -303,7 +303,7 @@ def test_agent_builds():
 if __name__ == "__main__":
     # Load .env if available
     from dotenv import load_dotenv
-    env_path = Path(__file__).resolve().parent.parent / ".env"
+    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
     if env_path.exists():
         load_dotenv(env_path)
         print(f"Loaded .env from {env_path}")

@@ -25,6 +25,9 @@ export const caseApi = {
   solidify: (caseId: string, stepId: string) =>
     http.post(`/cases/${caseId}/scripts/${stepId}/solidify`).then(r => r.data),
 
+  stop: (id: string) =>
+    http.post<{ case_id: string; status: string; message: string }>(`/cases/${id}/stop`).then(r => r.data),
+
   results: (id: string) =>
     http.get<ExecutionResult[]>(`/cases/${id}/results`).then(r => r.data),
 

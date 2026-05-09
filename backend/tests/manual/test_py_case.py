@@ -3,10 +3,10 @@ import asyncio
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent.parent.parent / ".env")
 
 
 async def test_discover_case():
@@ -15,7 +15,7 @@ async def test_discover_case():
 
     from app.engine.py_case_runner import discover_case_class
 
-    case_dir = Path(__file__).resolve().parent.parent.parent / "cases" / "baidu_search"
+    case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search"
     case_class = discover_case_class(case_dir)
 
     print(f"  Class: {case_class.__name__}")
@@ -35,7 +35,7 @@ async def test_run_case():
 
     from app.engine.py_case_runner import run_case
 
-    case_dir = Path(__file__).resolve().parent.parent.parent / "cases" / "baidu_search"
+    case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search"
     report = await run_case(case_dir)
 
     print(f"  Status: {report['status']}")
@@ -53,7 +53,7 @@ async def test_replay_mode():
 
     from app.engine.py_case_runner import run_case
 
-    case_dir = Path(__file__).resolve().parent.parent.parent / "cases" / "baidu_search"
+    case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search"
 
     # Run first to generate scripts
     print("  First run (explore mode)...")

@@ -25,7 +25,6 @@ from unittest.mock import patch
 import pytest
 
 # Ensure backend is on path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Force headless mode for E2E tests
 os.environ["HEADLESS"] = "true"
@@ -344,7 +343,7 @@ class TestAPILifecycle:
     def setup_client(self, multi_step_case):
         from fastapi.testclient import TestClient
         from app.main import app
-        from app.routers.cases import _executions
+        from app.engine.execution_manager import _executions
 
         _executions.clear()
         self.case_dir, self.case_id, self.url = multi_step_case
@@ -572,7 +571,9 @@ class TestScriptRoundtrip:
                 {"action": "fill", "args": {"selector": "#text-input", "text": "Generated"}},
                 {"action": "click", "args": {"selector": "#submit-btn"}},
             ]
-            script = ai._generate_script(agent_steps)
+            from app.engine.script_generator import generate_replay_script
+
+            script = generate_replay_script("gen_test", agent_steps)
 
             # Verify script content
             assert "async def run(page, context):" in script
@@ -629,10 +630,8 @@ class TestScriptRoundtrip:
 
     @pytest.mark.asyncio
     async def test_generate_script_all_action_types(self):
-        """_generate_script handles all supported action types."""
-        ctx = AIContext(
-            page=None, case_dir=Path("/tmp"), step_id="all_actions"
-        )
+        """generate_replay_script handles all supported action types."""
+        from app.engine.script_generator import generate_replay_script
 
         agent_steps = [
             {"action": "navigate", "args": {"url": "http://example.com"}},
@@ -649,7 +648,7 @@ class TestScriptRoundtrip:
             {"action": "hover", "args": {"selector": "#hover"}},
         ]
 
-        script = ctx._generate_script(agent_steps)
+        script = generate_replay_script("all_actions", agent_steps)
 
         assert 'await page.goto("http://example.com")' in script
         assert 'await page.click("#btn")' in script
@@ -1042,7 +1041,7 @@ if __name__ == "__main__":
 
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
-        cwd=Path(__file__).resolve().parent.parent,
+        cwd=Path(__file__).resolve().parent.parent.parent,
         env={**os.environ, "HEADLESS": "true"},
     )
     sys.exit(result.returncode)
