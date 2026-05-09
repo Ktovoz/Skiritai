@@ -51,9 +51,16 @@ def find_chrome_processes() -> list[dict]:
 
 
 def find_session_files(root: Path) -> list[dict]:
-    """Find all .browser_session files under the given root directory."""
+    """Find all browser session files under the given root directory.
+
+    Uses the same SESSION_FILE constant as engine/browser.py.
+    """
+    # Import the shared constant to avoid hardcoding
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from app.engine.browser import SESSION_FILE
+
     sessions = []
-    for path in root.rglob(".browser_session"):
+    for path in root.rglob(SESSION_FILE):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             cdp_port = data.get("cdp_port")
@@ -118,7 +125,11 @@ def cmd_status():
     print(f"\nChrome processes with --remote-debugging-port: {len(chrome_procs)}")
     if chrome_procs:
         for p in chrome_procs:
-            status = "ALIVE" if True else "DEAD"
+            try:
+                os.kill(p["pid"], 0)
+                status = "ALIVE"
+            except OSError:
+                status = "DEAD"
             print(f"  PID {p['pid']:>6}  port={p['port'] or '?':>5}  {status}")
     else:
         print("  (none)")
@@ -202,7 +213,7 @@ def cmd_cleanup(specific_case_dir: str | None = None):
     search_dirs.append(Path(tempfile.gettempdir()))
 
     for search_dir in search_dirs:
-        for path in search_dir.rglob(".browser_session"):
+        for path in search_dir.rglob(SESSION_FILE):
             if specific_case_dir and str(path.parent) != specific_case_dir:
                 continue
             if cleanup_session_file(path):

@@ -10,7 +10,7 @@ from pathlib import Path
 from app.logger import logger
 
 # File that stores the browser session info for persistent sessions
-_SESSION_FILE = ".browser_session"
+SESSION_FILE = ".browser_session"
 
 
 def get_launch_args() -> dict:
@@ -32,7 +32,7 @@ def get_launch_args() -> dict:
 
 def _session_path(case_dir: Path) -> Path:
     """Path to the persisted session file."""
-    return case_dir / _SESSION_FILE
+    return case_dir / SESSION_FILE
 
 
 def _save_session(case_dir: Path, cdp_port: int, pid: int) -> None:
@@ -43,7 +43,7 @@ def _save_session(case_dir: Path, cdp_port: int, pid: int) -> None:
     logger.info(f"[Browser] Session saved: port={cdp_port}, pid={pid} -> {path}")
 
 
-def _load_session(case_dir: Path) -> dict | None:
+def load_session(case_dir: Path) -> dict | None:
     """Load persisted session info. Returns None if not found."""
     path = _session_path(case_dir)
     if not path.exists():

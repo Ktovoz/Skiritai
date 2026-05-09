@@ -7,9 +7,11 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.engine.event_bus import event_bus
+from app.engine.execution_manager import cancel_execution, register_execution, unregister_execution
 from app.engine.py_case_runner import discover_case_class, list_cases, run_case
 from app.engine.ws_manager import ws_manager
 from app.logger import logger
@@ -17,19 +19,6 @@ from app.logger import logger
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 CASES_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "cases"
-
-# Execution task registry for cancellation
-_executions: dict[str, asyncio.Task] = {}
-
-
-async def _cancel_execution(case_id: str) -> bool:
-    """Cancel a running execution for the given case_id. Returns True if cancelled."""
-    task = _executions.pop(case_id, None)
-    if task and not task.done():
-        task.cancel()
-        logger.info(f"[API] Execution cancelled for case: {case_id}")
-        return True
-    return False
 
 
 # --- Case APIs ---
@@ -99,7 +88,7 @@ async def api_run_case(case_id: str):
         raise HTTPException(status_code=404, detail="Case not found")
 
     # Cancel any previous execution for this case
-    await _cancel_execution(case_id)
+    await cancel_execution(case_id)
 
     async def _run():
         async def _ws_bridge(event):
@@ -146,10 +135,10 @@ async def api_run_case(case_id: str):
             )
         finally:
             event_bus.unsubscribe(_ws_bridge)
-            _executions.pop(case_id, None)
+            unregister_execution(case_id)
 
     task = asyncio.create_task(_run())
-    _executions[case_id] = task
+    register_execution(case_id, task)
     logger.info(f"[API] Case execution started: {case_id}")
 
     return {"case_id": case_id, "status": "started", "message": "Execution started"}
@@ -162,7 +151,7 @@ async def api_stop_case(case_id: str):
     if not case_dir.exists():
         raise HTTPException(status_code=404, detail="Case not found")
 
-    cancelled = await _cancel_execution(case_id)
+    cancelled = await cancel_execution(case_id)
     if cancelled:
         return {"case_id": case_id, "status": "cancelled", "message": "Execution cancelled"}
     else:
@@ -286,3 +275,14 @@ async def api_get_result(case_id: str, timestamp: str):
             screenshots.append(f.stem)
 
     return {"timestamp": timestamp, "report": report, "screenshots": screenshots}
+
+
+@router.get("/{case_id}/results/{timestamp}/screenshots/{filename}")
+async def api_get_screenshot(case_id: str, timestamp: str, filename: str):
+    """Serve a screenshot file."""
+    if ".." in filename or "/" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    screenshot_path = CASES_ROOT / case_id / "results" / timestamp / "screenshots" / filename
+    if not screenshot_path.exists():
+        raise HTTPException(status_code=404, detail="Screenshot not found")
+    return FileResponse(screenshot_path, media_type="image/png")

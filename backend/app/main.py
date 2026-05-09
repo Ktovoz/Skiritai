@@ -6,7 +6,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.logger import logger
+from app.engine.agent_loop import register_all_tools
 from app.routers import cases, ws
+
+# Explicitly register all tools at startup (Playwright + perception)
+register_all_tools()
 
 app = FastAPI(title="Skiritai", description="AI 驱动的测试自动化智能体")
 
