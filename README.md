@@ -8,10 +8,8 @@
 
 <br>
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Playwright](https://img.shields.io/badge/Playwright-1.40+-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React-19+-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [English](README.md) | [中文](README_zh.md)
@@ -22,7 +20,7 @@
 
 ## What is Skiritai?
 
-Skiritai is an AI-driven test automation framework that **scouts automation paths before executing them**.
+Skiritai is an AI-driven browser test automation framework that **scouts automation paths before executing them**.
 
 Like the ancient Skiritai who reconnoitered the terrain before the Spartan army advanced, Skiritai's agent first **explores** the target application — navigating pages, discovering UI elements, and figuring out the correct sequence of actions — then **generates replayable scripts** that can execute the same path at 30x speed without any AI inference.
 
@@ -40,17 +38,17 @@ Replay Mode (Execute the proven path)
 |---------|-------------|
 | **Explore → Replay Loop** | AI explores and generates scripts on first run; replays them instantly on subsequent runs |
 | **30x Performance** | Replay mode skips AI inference entirely — 74s → 2.5s |
-| **Python-native Cases** | Define test cases as Python classes with `@step_mode` decorators |
+| **Python-native Cases** | Define test cases as Python classes with decorators |
 | **Auto-Solidification** | Successful explorations are automatically saved as replayable scripts |
 | **Multi-level Fallback** | `fill` → `click_force` → `eval_js` for resilient element interaction |
-| **Real-time Monitoring** | WebSocket-based live execution logs and event streaming |
 | **Flexible LLM** | Supports OpenAI, Anthropic, Qwen, and any compatible API |
-| **Web UI** | React + TypeScript dashboard for managing and monitoring test cases |
+| **Optional Web UI** | FastAPI backend with REST + WebSocket for external frontends |
+| **CLI** | `skiritai run/serve/list/browser` commands |
 
 ## How It Works
 
 ```python
-from app.engine.base_case import BaseCase, step_mode
+from skiritai import BaseCase, step_mode
 
 class SearchTest(BaseCase):
     async def setup(self):
@@ -90,24 +88,17 @@ Total: 2.5s
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.10+
-- Node.js 18+ (for frontend)
-- An LLM API key (OpenAI / Anthropic / compatible provider)
-
-### 1. Install Backend
+### 1. Install
 
 ```bash
-cd backend
-pip install -r requirements.txt
+pip install skiritai
 playwright install chromium
 ```
 
 ### 2. Configure
 
 ```bash
-# backend/.env
+# .env
 OPENAI_API_KEY=your-api-key
 OPENAI_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-4o
@@ -116,59 +107,73 @@ LLM_MODEL=gpt-4o
 ### 3. Run
 
 ```bash
-cd backend
-python -c "
-import asyncio
-from app.engine.py_case_runner import run_case
-from pathlib import Path
+# Run an example case
+skiritai run examples/minimal
 
-asyncio.run(run_case(Path('../cases/baidu_search')))
-"
+# List available cases
+skiritai list examples/
 ```
 
-### 4. (Optional) Start Web UI
+Or programmatically:
+
+```python
+import asyncio
+from pathlib import Path
+from skiritai import run_case
+
+report = asyncio.run(run_case(Path("examples/minimal")))
+print(report)
+```
+
+### 4. (Optional) Start Web Server
 
 ```bash
-cd frontend
-npm install
-npm run dev
+pip install skiritai[web]
+skiritai serve --host 0.0.0.0 --port 8000
 ```
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| AI Engine | LangGraph + LangChain (ReAct Agent) |
-| LLM | OpenAI / Anthropic / Qwen / any compatible API |
-| Browser Automation | Playwright |
-| Backend | FastAPI (async) |
-| Frontend | React + TypeScript + Vite |
-| Storage | File-based (scripts, results, reports) |
 
 ## Project Structure
 
 ```
-Skiritai/
-├── backend/
-│   ├── app/
-│   │   ├── engine/
-│   │   │   ├── agent_loop.py      # LangGraph ReAct Agent
-│   │   │   ├── ai_context.py      # Explore/Replay execution context
-│   │   │   ├── base_case.py       # Test case base class
-│   │   │   ├── py_case_runner.py  # Python case runner
-│   │   │   ├── tools.py           # Playwright tool set (14 tools)
-│   │   │   └── browser.py         # Browser lifecycle management
-│   │   ├── routers/
-│   │   │   ├── cases.py           # REST API for cases
-│   │   │   └── ws.py              # WebSocket real-time events
-│   │   └── main.py
-│   └── tests/
-├── cases/                          # Test case definitions
-│   ├── baidu_search/
-│   └── playwright_docs/
-├── frontend/                       # Web dashboard (React + TS)
-├── LICENSE
-└── README.md
+skiritai/
+├── core/                      # Core engine (always installed)
+│   ├── agent_loop.py          # LangGraph ReAct Agent
+│   ├── ai_context.py          # Explore/Replay execution context
+│   ├── base_case.py           # Test case base class
+│   ├── runner.py              # Case discovery and execution
+│   ├── tools.py               # Playwright tool set (14 tools)
+│   ├── browser.py             # Browser lifecycle management
+│   └── ...
+├── llm/                       # LLM provider abstraction
+│   ├── openai_provider.py
+│   └── anthropic_provider.py
+├── events/                    # Event bus
+├── web/                       # [optional] FastAPI server (pip install skiritai[web])
+│   ├── app.py                 # Application factory
+│   ├── routers/               # REST + WebSocket endpoints
+│   └── ws_manager.py          # Event → WebSocket bridge
+└── cli.py                     # CLI entry point
+
+examples/                      # Sample test cases
+├── minimal/                   # Pure Playwright, no AI needed
+├── baidu_search/              # AI-driven with replay scripts
+└── playwright_docs/           # Exploration example
+
+tests/                         # Framework tests
+├── unit/
+├── functional/
+├── acceptance/
+└── e2e/
+```
+
+## CLI Commands
+
+```bash
+skiritai run <case_dir>               # Run a test case
+skiritai serve [--host] [--port]       # Start web server
+skiritai list [cases_root]            # List available cases
+skiritai browser status [case_dir]    # Check persistent browser session
+skiritai browser cleanup [case_dir]   # Kill orphan browser process
 ```
 
 ## Tool Set

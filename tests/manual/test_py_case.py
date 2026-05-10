@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parent.parent.parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 
 async def test_discover_case():
@@ -14,7 +14,7 @@ async def test_discover_case():
 
     from skiritai.core.runner import discover_case_class
 
-    case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search"
+    case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "baidu_search"
     case_class = discover_case_class(case_dir)
 
     print(f"  Class: {case_class.__name__}")
@@ -34,7 +34,7 @@ async def test_run_case():
 
     from skiritai.core.runner import run_case
 
-    case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search"
+    case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "baidu_search"
     report = await run_case(case_dir)
 
     print(f"  Status: {report['status']}")
@@ -52,7 +52,7 @@ async def test_replay_mode():
 
     from skiritai.core.runner import run_case
 
-    case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search"
+    case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "baidu_search"
 
     # Run first to generate scripts
     print("  First run (explore mode)...")

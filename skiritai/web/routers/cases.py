@@ -19,7 +19,7 @@ from skiritai.logger import logger
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 # Configurable cases root — set via create_app() or SKIRITAI_CASES_ROOT
-CASES_ROOT = Path.cwd() / "cases"
+CASES_ROOT = Path.cwd() / "examples"
 
 
 def set_cases_root(root: Path) -> None:
