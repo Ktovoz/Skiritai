@@ -5,10 +5,8 @@ from playwright.async_api import async_playwright
 
 
 async def run(page, context):
-    await page.goto("https://ktovoz.com")
-    await page.wait_for_load_state("networkidle")
-    await page.mouse.wheel(0, 1200)
-    result = await page.evaluate('window.scrollTo(0, document.body.scrollHeight);')
+    await page.mouse.wheel(0, 2000)
+    await page.mouse.wheel(0, 10000)
 
 
 if __name__ == "__main__":

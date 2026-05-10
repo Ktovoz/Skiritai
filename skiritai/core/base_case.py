@@ -482,6 +482,8 @@ class BaseCase:
         except Exception as e:
             logger.error(f"[Hook] before_step({step_name}) raised: {e}")
 
+        ai._step_started_at = time.time()
+
         try:
             if takes_ai_param:
                 result = await method(ai)
@@ -490,12 +492,18 @@ class BaseCase:
             if result is None:
                 result = ai._last_result or {"success": True, "summary": "完成"}
             status = "success" if result.get("success") else "failed"
-            self._results.append({
+            ai._step_elapsed = time.time() - ai._step_started_at
+
+            step_entry = {
                 "step_id": step_name,
                 "status": status,
                 "mode": "replay" if ai.has_replay() else "explore",
                 "summary": result.get("summary", ""),
-            })
+                "elapsed": round(ai._step_elapsed, 2),
+                "screenshots": list(ai._screenshots),
+                "verifications": list(ai._verifications),
+            }
+            self._results.append(step_entry)
 
             if status == "success":
                 self._ctx.completed_steps.append(step_name)
@@ -509,6 +517,7 @@ class BaseCase:
                     "step_id": step_name,
                     "mode": "replay" if ai.has_replay() else "explore",
                     "summary": result.get("summary", ""),
+                    "elapsed": step_entry["elapsed"],
                 },
             ))
 
@@ -521,6 +530,7 @@ class BaseCase:
             return result
         except Exception as e:
             logger.error(f"[Step] {step_name} error: {e}")
+            ai._step_elapsed = time.time() - ai._step_started_at
 
             # --- on_step_error hook ---
             hook_result = StepResult.continue_()
@@ -530,16 +540,21 @@ class BaseCase:
                 logger.error(f"[Hook] on_step_error({step_name}) raised: {hook_exc}")
 
             self._ctx.failed_step = step_name
-            # Auto screenshot on failure
-            if self._results_dir and self._page:
+            # Auto screenshot on failure (base64 for report)
+            auto_screenshot = None
+            if self._page:
                 try:
-                    screenshots_dir = self._results_dir / "screenshots"
-                    screenshots_dir.mkdir(parents=True, exist_ok=True)
-                    screenshot_path = screenshots_dir / f"{step_name}.png"
-                    await self._page.screenshot(path=str(screenshot_path), full_page=True)
-                    logger.info(f"[Step] Screenshot saved: {screenshot_path}")
+                    import base64, tempfile
+                    path = str(Path(tempfile.gettempdir()) / f"skiritai_error_{step_name}.png")
+                    await self._page.screenshot(path=path, full_page=True)
+                    auto_screenshot = {"name": f"error_{step_name}", "path": path}
+                    logger.info(f"[Step] Error screenshot saved: {path}")
                 except Exception as se:
                     logger.warning(f"[Step] Failed to capture screenshot: {se}")
+
+            step_screenshots = list(ai._screenshots)
+            if auto_screenshot:
+                step_screenshots.append(auto_screenshot)
 
             result = {"success": False, "summary": str(e), "_hook_result": hook_result}
             self._results.append({
@@ -548,11 +563,14 @@ class BaseCase:
                 "mode": "replay" if ai.has_replay() else "explore",
                 "summary": str(e),
                 "error": str(e),
+                "elapsed": round(ai._step_elapsed, 2),
+                "screenshots": step_screenshots,
+                "verifications": list(ai._verifications),
             })
             await event_bus.publish(Event(
                 type="step_failed",
                 execution_id=self._execution_id,
-                data={"step_id": step_name, "error": str(e)},
+                data={"step_id": step_name, "error": str(e), "elapsed": round(ai._step_elapsed, 2)},
             ))
 
             # --- after_step hook ---
@@ -723,34 +741,84 @@ class BaseCase:
     @staticmethod
     def _render_html(report: dict) -> str:
         """Render the report using the built-in HTML template."""
+        import base64
+
         template_path = Path(__file__).parent / "templates" / "report.html"
         html = template_path.read_text(encoding="utf-8")
 
-        # Build step rows
-        step_rows = []
+        # Build step cards
+        step_cards = []
         for i, step in enumerate(report.get("steps", []), 1):
             icon = "✓" if step["status"] == "success" else "✗"
-            color = "#1a7d1a" if step["status"] == "success" else "#c41e1e"
-            summary = step.get("summary", "")[:120]
-            step_rows.append(
-                f'<div class="step-row">'
+            status_cls = "pass" if step["status"] == "success" else "fail"
+            elapsed_str = BaseCase._format_duration(step.get("elapsed", 0))
+            summary = step.get("summary", "")[:300]
+
+            # Build verification items
+            verifications_html = ""
+            for v in step.get("verifications", []):
+                v_cls = "verif-pass" if v["passed"] else "verif-fail"
+                v_icon = "✓" if v["passed"] else "✗"
+                reasons = v.get("reason", "")[:150]
+                verifications_html += (
+                    f'<div class="verification-item {v_cls}">'
+                    f'<span class="verif-icon">{v_icon}</span>'
+                    f'<span>{v["assertion"]}</span>'
+                    f'</div>'
+                    f'<div class="verif-reason">{reasons}</div>'
+                )
+
+            # Build screenshots (base64 embedded)
+            screenshots_html = ""
+            for s in step.get("screenshots", []):
+                try:
+                    with open(s["path"], "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode()
+                    screenshots_html += (
+                        f'<div class="screenshot-thumb">'
+                        f'<img src="data:image/png;base64,{b64}" loading="lazy" />'
+                        f'<div class="screenshot-label">{s["name"]}</div>'
+                        f'</div>'
+                    )
+                except Exception:
+                    pass
+            if screenshots_html:
+                screenshots_html = f'<div class="screenshots"><div class="screenshots-title">Screenshots</div>{screenshots_html}</div>'
+
+            step_cards.append(
+                f'<div class="step-card">'
+                f'<div class="step-header">'
                 f'<span class="step-num">#{i}</span>'
                 f'<span class="step-name">{step["step_id"]}</span>'
                 f'<span class="step-mode">{step.get("mode", "")}</span>'
-                f'<span class="step-status"><span class="step-icon" style="color:{color}">{icon}</span></span>'
-                f'<span class="step-summary">{summary}</span>'
+                f'<span class="step-status {status_cls}">{icon} {step["status"].upper()}</span>'
+                f'<span class="step-time">{elapsed_str}</span>'
+                f'</div>'
+                f'<div class="step-body">'
+                f'<div class="step-summary">{summary}</div>'
+                f'{verifications_html}'
+                f'{screenshots_html}'
+                f'</div>'
                 f'</div>'
             )
+
+        # Count verifications
+        all_verifs = []
+        for s in report.get("steps", []):
+            all_verifs.extend(s.get("verifications", []))
+        verif_passed = sum(1 for v in all_verifs if v["passed"])
+        verif_total = len(all_verifs)
+        verif_summary = f"{verif_passed}/{verif_total}" if verif_total else "—"
 
         # Build failures section
         failures = [s for s in report.get("steps", []) if s["status"] == "failed"]
         failures_section = ""
         if failures:
             items = "".join(
-                f'<div class="failure-item"><b>{s["step_id"]}</b>: {s.get("summary", "")}</div>'
+                f'<div class="failure-item"><b>{s["step_id"]}</b>: {s.get("error", s.get("summary", ""))}</div>'
                 for s in failures
             )
-            failures_section = f'<div class="failures"><h2>Failures</h2>{items}</div>'
+            failures_section = f'<div class="failures-section"><h2>Failures</h2>{items}</div>'
 
         passed = report["success_count"]
         failed = report["failed_count"]
@@ -763,18 +831,37 @@ class BaseCase:
         html = html.replace("{{elapsed}}", BaseCase._format_duration(report["elapsed_seconds"]))
         html = html.replace("{{passed_count}}", str(passed))
         html = html.replace("{{failed_count}}", str(failed))
-        html = html.replace("{{step_rows}}", "\n".join(step_rows))
+        html = html.replace("{{verification_summary}}", verif_summary)
+        html = html.replace("{{total_elapsed}}", BaseCase._format_duration(report["elapsed_seconds"]))
+        html = html.replace("{{step_cards}}", "\n".join(step_cards))
         html = html.replace("{{failures_section}}", failures_section)
         return html
 
     def _save_report(self, report: dict) -> None:
         """Save report.json and report.html to the results directory."""
-        import json
+        import json, shutil
         from datetime import datetime
 
         results_dir = self._results_dir or (self._case_dir / "test_results")
         ts_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
         ts_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy screenshots to results dir and update paths
+        screenshots_dir = ts_dir / "screenshots"
+        for step in report.get("steps", []):
+            new_paths = []
+            for s in step.get("screenshots", []):
+                try:
+                    screenshots_dir.mkdir(parents=True, exist_ok=True)
+                    src = Path(s["path"])
+                    dst = screenshots_dir / f"{step['step_id']}_{s['name']}.png"
+                    if src.exists():
+                        shutil.copy2(src, dst)
+                        s["path"] = str(dst)
+                        new_paths.append(s)
+                except Exception:
+                    pass
+            step["screenshots"] = new_paths
 
         # JSON report (machine-readable)
         (ts_dir / "report.json").write_text(

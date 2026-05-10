@@ -5,11 +5,7 @@ from playwright.async_api import async_playwright
 
 
 async def run(page, context):
-    await page.goto("https://ktovoz.com")
-    await page.wait_for_load_state("networkidle")
-    await page.click("button.flex")
-    await page.fill("input.h-8", "GCC")
-    await page.locator("input.h-8").press_sequentially("\n")
+    pass
 
 
 if __name__ == "__main__":
