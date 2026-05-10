@@ -410,16 +410,16 @@ class TestPyCaseRunner:
     def test_discover_case_class(self):
         from skiritai.core.runner import discover_case_class
 
-        case_dir = Path(__file__).resolve().parent.parent.parent.parent / "cases" / "baidu_search"
+        case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "baidu_search"
         cls = discover_case_class(case_dir)
         assert cls.__name__ == "BaiduSearchCase"
 
     def test_list_cases_returns_all(self):
         from skiritai.core.runner import list_cases
 
-        cases_root = Path(__file__).resolve().parent.parent.parent.parent / "cases"
+        cases_root = Path(__file__).resolve().parent.parent.parent / "examples"
         cases = list_cases(cases_root)
-        assert len(cases) >= 4  # baidu_search, baidu_search_explore, baidu_search_replay, playwright_docs
+        assert len(cases) >= 3  # baidu_search, minimal, playwright_docs
 
         case_ids = [c["id"] for c in cases]
         assert "baidu_search" in case_ids
@@ -428,7 +428,7 @@ class TestPyCaseRunner:
     def test_list_cases_structure(self):
         from skiritai.core.runner import list_cases
 
-        cases_root = Path(__file__).resolve().parent.parent.parent.parent / "cases"
+        cases_root = Path(__file__).resolve().parent.parent.parent / "examples"
         cases = list_cases(cases_root)
 
         for c in cases:
@@ -458,7 +458,7 @@ class TestPyCaseRunner:
             })
 
             with patch(
-                "skiritai.core.py_case_runner.discover_case_class",
+                "skiritai.core.runner.discover_case_class",
                 return_value=FakeCase,
             ):
                 with patch.object(FakeCase, "__new__", return_value=mock_instance):
@@ -625,7 +625,7 @@ class TestAPI:
         from skiritai.core.execution_manager import _executions
         _executions.clear()
         self.client = TestClient(create_app())
-        self.cases_root = Path(__file__).resolve().parent.parent.parent.parent / "cases"
+        self.cases_root = Path(__file__).resolve().parent.parent.parent / "examples"
 
     def test_health(self):
         resp = self.client.get("/api/health")
@@ -637,7 +637,7 @@ class TestAPI:
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        assert len(data) >= 4
+        assert len(data) >= 3
         for item in data:
             assert "id" in item
             assert "name" in item

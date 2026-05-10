@@ -730,7 +730,7 @@ class TestAPILifecycle:
         assert resp3.json()["status"] == "solidified"
 
         # Verify marker
-        cases_root = Path(__file__).resolve().parent.parent.parent.parent / "cases"
+        cases_root = Path(__file__).resolve().parent.parent.parent / "examples"
         marker = cases_root / target_case / "scripts" / f".{target_step}.solidified"
         assert marker.exists()
 

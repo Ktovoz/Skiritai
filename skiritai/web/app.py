@@ -18,7 +18,7 @@ def create_app(cases_root: Path | None = None) -> FastAPI:
 
     Args:
         cases_root: Root directory containing case folders. If None, reads
-            from SKIRITAI_CASES_ROOT env var, falling back to ``<cwd>/cases``.
+            from SKIRITAI_CASES_ROOT env var, falling back to ``<cwd>/examples``.
     """
     # Explicitly register all tools at startup (Playwright + perception)
     register_all_tools()
@@ -26,7 +26,7 @@ def create_app(cases_root: Path | None = None) -> FastAPI:
     # Resolve cases root: argument > env var > default
     if cases_root is None:
         env_root = os.getenv("SKIRITAI_CASES_ROOT")
-        cases_root = Path(env_root) if env_root else Path.cwd() / "cases"
+        cases_root = Path(env_root) if env_root else Path.cwd() / "examples"
 
     # Inject into router module
     cases.set_cases_root(cases_root)
