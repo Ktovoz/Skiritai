@@ -5,10 +5,7 @@ from playwright.async_api import async_playwright
 
 
 async def run(page, context):
-    result = await page.evaluate("window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)); 'scrolled';")
-    await page.wait_for_selector("body", timeout=5000)
-    result = await page.evaluate('window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)); ({y: window.scrollY, inner: window.innerHeight, h: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)})')
-    await page.mouse.wheel(0, 800)
+    result = await page.evaluate('window.scrollTo(0, document.body.scrollHeight); true')
 
 
 if __name__ == "__main__":

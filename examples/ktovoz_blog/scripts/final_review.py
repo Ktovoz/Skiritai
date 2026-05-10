@@ -5,7 +5,7 @@ from playwright.async_api import async_playwright
 
 
 async def run(page, context):
-    await page.click("button.flex")
+    pass
 
 
 if __name__ == "__main__":

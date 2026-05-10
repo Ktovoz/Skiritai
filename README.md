@@ -215,6 +215,30 @@ skiritai run examples/baidu_search
 skiritai run examples/ktovoz_blog
 ```
 
+## Roadmap
+
+### Vision Perception Layer
+
+Current AI exploration relies on DOM analysis and CSS selectors. The next evolution adds **visual perception** — the agent will "see" the page like a human tester, enabling:
+
+- **Visual-based AI exploration** — interpret screenshots, identify UI elements by appearance, and interact with canvas/WebGL-based interfaces that lack accessible DOM
+- **Multimodal model support** — leverage vision-language models (GPT-4o, Claude 3.5 Sonnet, Gemini) and native multimodal models for richer page understanding
+- **Visual regression detection** — compare screenshots across runs to catch unexpected UI changes
+
+### Multi-Platform Testing
+
+Skiritai currently supports **Web** (Playwright/Chromium). We plan to extend to:
+
+| Platform | Planned Approach | Status |
+|----------|-----------------|--------|
+| **Mobile (iOS/Android)** | Appium / browser-use mobile integration | Planned |
+| **API Testing** | HTTP request tools for the AI agent | Planned |
+| **Desktop (Electron, native)** | Playwright Electron / OS-level automation | Under investigation |
+
+The goal is a unified test framework where the same Explore → Replay workflow works across Web, Mobile, and API — write once, test everywhere.
+
+---
+
 ## CLI Commands
 
 ```bash

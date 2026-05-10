@@ -117,6 +117,23 @@ def on_failure(policy: FailurePolicy, max_retries: int = 1):
     return decorator
 
 
+def max_steps(limit: int):
+    """Decorator to set the maximum agent steps (recursion_limit) for a step.
+
+    Usage:
+        @max_steps(30)
+        async def complex_step(self):
+            await self.ai.action("do something that needs many tool calls")
+    """
+
+    def decorator(func):
+        func._max_steps = limit
+        func._is_step = True
+        return func
+
+    return decorator
+
+
 class BaseCase:
     """Base class for test cases.
 
@@ -177,6 +194,10 @@ class BaseCase:
         # Runner
         "get_step_methods", "run", "run_step",
     })
+
+    # Default max agent tool-call steps per step method (LangGraph recursion_limit).
+    # Override via class attribute or @max_steps(N) decorator on individual methods.
+    max_steps: int = 20
 
     def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None):
         self._case_dir = case_dir or Path(inspect.getfile(self.__class__)).parent
@@ -439,9 +460,12 @@ class BaseCase:
     # ---- Step execution ----
 
     def _make_ai(self, step_id: str, on_log=None) -> AIContext:
-        """Create AIContext for a step, reading mode from @step_mode decorator."""
+        """Create AIContext for a step, reading decorators and class config."""
         method = getattr(self.__class__, step_id, None)
         default_mode = getattr(method, "_step_mode", "auto") if method else "auto"
+        # Resolve max_steps: @max_steps(N) decorator > class attribute > default 20
+        step_max_steps = getattr(method, "_max_steps", None) if method else None
+        effective_max_steps = step_max_steps if step_max_steps is not None else self.max_steps
         return AIContext(
             page=self.page,
             case_dir=self._case_dir,
@@ -449,6 +473,7 @@ class BaseCase:
             on_log=on_log,
             default_mode=default_mode,
             execution_id=self._execution_id,
+            max_steps=effective_max_steps,
         )
 
     async def run_step(self, step_name: str, on_log=None) -> dict:

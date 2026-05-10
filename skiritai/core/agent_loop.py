@@ -124,6 +124,7 @@ async def run_agent(
         on_log: Any = None,
         execution_id: str = "default",
         case_dir: Path | None = None,
+        max_steps: int = 20,
 ) -> dict:
     """
     Run the LangGraph ReAct agent on a task.
@@ -164,7 +165,7 @@ async def run_agent(
 
         async for event in agent.astream(
                 {"messages": [{"role": "user", "content": user_msg}]},
-                config={"recursion_limit": 20},
+                config={"recursion_limit": max_steps},
         ):
             _accumulate_token_usage(event, token_usage)
 

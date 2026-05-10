@@ -9,7 +9,7 @@ Demonstrates Skiritai's full capability set:
 - Failure policies for optional steps
 """
 
-from skiritai.core.base_case import BaseCase, FailurePolicy, on_failure
+from skiritai.core.base_case import BaseCase, FailurePolicy, on_failure, max_steps
 
 
 class KtovozBlogCase(BaseCase):
@@ -115,11 +115,14 @@ class KtovozBlogCase(BaseCase):
         await self.ai.action("检查页脚中是否有社交链接（如 GitHub、Twitter）和备案号")
         await self.ai.screenshot("footer")
 
+    @max_steps(30)
     async def final_review(self):
+        await self.ai.analyze_page()
         await self.ai.action(
-            "返回首页。基于本次测试中的所有发现，给出一份完整的总结报告："
-            "网站主题是什么、有哪些主要页面、大约有多少篇文章、"
-            "覆盖了哪些标签/分类、搜索功能是否可用、网站功能是否正常。"
+            "当前页面为网站首页。请基于当前页面信息和之前步骤的上下文，"
+            "给出一份简洁的总结报告，包括："
+            "1) 网站主题 2) 主要页面 3) 文章数量估算 4) 标签/分类覆盖 "
+            "5) 搜索功能状态。不需要重新导航，直接基于当前可见信息总结。"
         )
 
     # ---- Hooks ----
