@@ -3,19 +3,18 @@
 Run: python -m pytest tests/functional/test_perception_unit.py
 """
 import asyncio
-import json
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 
 
 # ─── Test 1: CaseContext state machine ────────────────────────────────
 
 def test_case_context():
-    from skiritai.core.case_context import CaseContext, CasePhase, StateError
+    from skiritai.core.case_context import CaseContext, CasePhase
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = CaseContext(case_dir=Path(tmpdir))
@@ -117,8 +116,8 @@ def test_tool_registration():
     from skiritai.core.tool_registry import ToolRegistry
 
     # Ensure modules are imported (triggers registration)
-    import skiritai.core.tools
-    import skiritai.core.perception
+    from skiritai.core.agent_loop import register_all_tools
+    register_all_tools()
 
     registry = ToolRegistry()
     all_tools = registry.get_all()
@@ -156,15 +155,15 @@ def test_replay_script_generation():
 
     # Simulate agent steps including perception tools
     agent_steps = [
-        {"action": "page_perceive", "args": {}},         # should be filtered
+        {"action": "page_perceive", "args": {}},  # should be filtered
         {"action": "find_element", "args": {"description": "search"}},  # filtered
         {"action": "navigate", "args": {"url": "https://www.baidu.com"}},
-        {"action": "get_page_info", "args": {}},          # filtered
+        {"action": "get_page_info", "args": {}},  # filtered
         {"action": "fill", "args": {"selector": "#kw", "text": "hello world"}},
         {"action": "click", "args": {"selector": "#su"}},
-        {"action": "page_perceive", "args": {}},          # filtered
+        {"action": "page_perceive", "args": {}},  # filtered
         {"action": "get_text", "args": {"selector": ".result"}},  # filtered
-        {"action": "response", "content": "done"},         # filtered
+        {"action": "response", "content": "done"},  # filtered
     ]
 
     script = generate_replay_script("test_step", agent_steps)
@@ -309,6 +308,7 @@ def test_agent_builds():
 if __name__ == "__main__":
     # Load .env if available
     from dotenv import load_dotenv
+
     env_path = Path(__file__).resolve().parent.parent.parent / ".env"
     if env_path.exists():
         load_dotenv(env_path)
@@ -342,9 +342,9 @@ if __name__ == "__main__":
     errors = []
 
     for name, test_fn in tests:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Running: {name}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         try:
             test_fn()
             passed += 1
@@ -353,11 +353,12 @@ if __name__ == "__main__":
             errors.append((name, str(e)))
             print(f"[FAIL] {name}: {e}")
             import traceback
+
             traceback.print_exc()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Results: {passed} passed, {failed} failed out of {passed + failed}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     if errors:
         print("\nFailures:")

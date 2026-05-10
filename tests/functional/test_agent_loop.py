@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -52,7 +52,7 @@ class TestBuildAgent:
 
         with patch("skiritai.core.agent_loop.get_provider", return_value=mock_provider):
             with patch(
-                "skiritai.core.agent_loop.create_react_agent"
+                    "skiritai.core.agent_loop.create_react_agent"
             ) as mock_create:
                 from skiritai.core.agent_loop import build_agent
 
@@ -78,27 +78,28 @@ class TestBuildAgent:
         from skiritai.llm.openai_provider import OpenAIProvider
 
         # Register tools before building (refactored: tools no longer auto-import)
-        import skiritai.core.tools        # registers Playwright action tools
-        import skiritai.core.perception   # registers DOM perception tools
+        from skiritai.core.agent_loop import register_all_tools
+        register_all_tools()
 
         mock_llm = MagicMock()
         mock_provider = MagicMock(spec=OpenAIProvider)
         mock_provider.build.return_value = mock_llm
         _PROVIDERS["mock_test"] = type(mock_provider)
 
-        with patch("skiritai.core.agent_loop.get_provider", return_value=mock_provider):
-            with patch(
-                "skiritai.core.agent_loop.create_react_agent"
-            ) as mock_create:
-                from skiritai.core.agent_loop import build_agent
-                build_agent()
+        try:
+            with patch("skiritai.core.agent_loop.get_provider", return_value=mock_provider):
+                with patch(
+                        "skiritai.core.agent_loop.create_react_agent"
+                ) as mock_create:
+                    from skiritai.core.agent_loop import build_agent
+                    build_agent()
 
-                call_kwargs = mock_create.call_args.kwargs
-                tool_names = [t.name for t in call_kwargs["tools"]]
-                assert "page_perceive" in tool_names
-                assert "find_element" in tool_names
-
-        _PROVIDERS.pop("mock_test", None)
+                    call_kwargs = mock_create.call_args.kwargs
+                    tool_names = [t.name for t in call_kwargs["tools"]]
+                    assert "page_perceive" in tool_names
+                    assert "find_element" in tool_names
+        finally:
+            _PROVIDERS.pop("mock_test", None)
 
 
 # ============================================================
@@ -133,7 +134,7 @@ class TestRunAgent:
         mock_page.url = "http://localhost"
 
         with patch(
-            "skiritai.core.agent_loop.build_agent"
+                "skiritai.core.agent_loop.build_agent"
         ) as mock_build:
             mock_agent = MagicMock()
             mock_agent.astream = self._mock_agent_astream
@@ -458,6 +459,7 @@ class TestAgentLoopConstants:
 
 if __name__ == "__main__":
     import subprocess
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
         cwd=Path(__file__).resolve().parent.parent.parent,

@@ -7,11 +7,11 @@ from typing import Any
 
 from langgraph.prebuilt import create_react_agent
 
-from skiritai.events import Event, event_bus
-from skiritai.llm import get_provider
 from skiritai.core.llm_retry import retry_async
 from skiritai.core.tool_registry import ToolRegistry
 from skiritai.core.tools import set_page
+from skiritai.events import Event, event_bus
+from skiritai.llm import get_provider
 from skiritai.logger import logger
 
 # Tools that are read-only perception — excluded from replay scripts
@@ -93,8 +93,8 @@ def register_all_tools() -> None:
     Must be called once at startup (or before building the agent).
     This replaces relying on import side-effects.
     """
-    import skiritai.core.tools        # registers 14 Playwright action tools
-    import skiritai.core.perception   # registers 2 DOM perception tools
+    import skiritai.core.tools  # noqa: F401 — registers action tools
+    import skiritai.core.perception  # noqa: F401 — registers perception tools
 
 
 def _build_llm():
@@ -119,12 +119,12 @@ def build_agent(system_prompt: str | None = None):
 
 
 async def run_agent(
-    page: Any,
-    task_description: str,
-    url: str = "",
-    on_log: Any = None,
-    execution_id: str = "default",
-    case_dir: Path | None = None,
+        page: Any,
+        task_description: str,
+        url: str = "",
+        on_log: Any = None,
+        execution_id: str = "default",
+        case_dir: Path | None = None,
 ) -> dict:
     """
     Run the LangGraph ReAct agent on a task.
@@ -164,8 +164,8 @@ async def run_agent(
         final_summary = ""
 
         async for event in agent.astream(
-            {"messages": [{"role": "user", "content": user_msg}]},
-            config={"recursion_limit": 20},
+                {"messages": [{"role": "user", "content": user_msg}]},
+                config={"recursion_limit": 20},
         ):
             _accumulate_token_usage(event, token_usage)
 
