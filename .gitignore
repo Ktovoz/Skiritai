@@ -42,3 +42,8 @@ backend/tests/scripts/
 
 # Test execution results
 cases/*/results/
+examples/**/results/
+__pycache__/
+.skiritai/
+*.egg-info/
+.pytest_cache/

@@ -1,0 +1,27 @@
+{
+  "case_name": "BaiduSearchCase",
+  "status": "completed",
+  "total_steps": 3,
+  "success_count": 3,
+  "failed_count": 0,
+  "steps": [
+    {
+      "step_id": "open_baidu",
+      "status": "success",
+      "mode": "explore",
+      "summary": "ok"
+    },
+    {
+      "step_id": "search_keyword",
+      "status": "success",
+      "mode": "explore",
+      "summary": "ok"
+    },
+    {
+      "step_id": "verify_results",
+      "status": "success",
+      "mode": "explore",
+      "summary": "ok"
+    }
+  ]
+}
