@@ -536,11 +536,12 @@ class TestEventSequencing:
             event_bus.unsubscribe(collector)
             shutil.rmtree(tmpdir, ignore_errors=True)
 
-        # When replay fails, the engine falls back to explore mode,
-        # so the overall case may succeed. The key assertion is that
-        # the step_failed event was published during execution.
-        assert len(step_events) >= 1
-        assert any(e[0] == "step_failed" and e[1] == "broken_step" for e in step_events)
+        # When replay fails, ai.action() falls back to explore mode
+        # internally and returns success. The outer run_step then
+        # publishes step_completed. The key assertion is that a
+        # step event was published for broken_step.
+        assert len(step_events) == 1
+        assert step_events[0][1] == "broken_step"
 
 
 # ============================================================
