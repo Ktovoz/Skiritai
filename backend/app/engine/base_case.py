@@ -619,7 +619,10 @@ class BaseCase:
 
         report = self._build_report(status=status)
 
-        logger.info(f"[Case] Done: {status} ({success_count}/{total})")
+        if status == "completed":
+            logger.success(f"[Case] Done: {status} ({success_count}/{total})")
+        else:
+            logger.error(f"[Case] Done: {status} ({success_count}/{total})")
 
         await event_bus.publish(Event(
             type="execution_completed",
