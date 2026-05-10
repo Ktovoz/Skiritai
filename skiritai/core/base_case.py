@@ -675,6 +675,9 @@ class BaseCase:
 
         report = self._build_report(status=status)
 
+        # Save report to disk (test_results/<timestamp>/report.json + report.md)
+        self._save_report(report)
+
         if status == "completed":
             logger.success(f"[Case] Done: {status} ({success_count}/{total})")
         else:
@@ -705,3 +708,80 @@ class BaseCase:
         if error:
             report["error"] = error
         return report
+
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        if seconds < 60:
+            return f"{seconds:.1f}s"
+        m, s = divmod(int(seconds), 60)
+        return f"{m}m{s}s"
+
+    @staticmethod
+    def _render_html(report: dict) -> str:
+        """Render the report using the built-in HTML template."""
+        template_path = Path(__file__).parent / "templates" / "report.html"
+        html = template_path.read_text(encoding="utf-8")
+
+        # Build step rows
+        step_rows = []
+        for i, step in enumerate(report.get("steps", []), 1):
+            icon = "✓" if step["status"] == "success" else "✗"
+            color = "#1a7d1a" if step["status"] == "success" else "#c41e1e"
+            summary = step.get("summary", "")[:120]
+            step_rows.append(
+                f'<div class="step-row">'
+                f'<span class="step-num">#{i}</span>'
+                f'<span class="step-name">{step["step_id"]}</span>'
+                f'<span class="step-mode">{step.get("mode", "")}</span>'
+                f'<span class="step-status"><span class="step-icon" style="color:{color}">{icon}</span></span>'
+                f'<span class="step-summary">{summary}</span>'
+                f'</div>'
+            )
+
+        # Build failures section
+        failures = [s for s in report.get("steps", []) if s["status"] == "failed"]
+        failures_section = ""
+        if failures:
+            items = "".join(
+                f'<div class="failure-item"><b>{s["step_id"]}</b>: {s.get("summary", "")}</div>'
+                for s in failures
+            )
+            failures_section = f'<div class="failures"><h2>Failures</h2>{items}</div>'
+
+        passed = report["success_count"]
+        failed = report["failed_count"]
+
+        html = html.replace("{{case_name}}", report["case_name"])
+        html = html.replace("{{status}}", report["status"].upper())
+        html = html.replace("{{status_badge_class}}", "badge-pass" if report["status"] == "completed" else "badge-fail")
+        html = html.replace("{{success_count}}", str(passed))
+        html = html.replace("{{total_steps}}", str(report["total_steps"]))
+        html = html.replace("{{elapsed}}", BaseCase._format_duration(report["elapsed_seconds"]))
+        html = html.replace("{{passed_count}}", str(passed))
+        html = html.replace("{{failed_count}}", str(failed))
+        html = html.replace("{{step_rows}}", "\n".join(step_rows))
+        html = html.replace("{{failures_section}}", failures_section)
+        return html
+
+    def _save_report(self, report: dict) -> None:
+        """Save report.json and report.html to the results directory."""
+        import json
+        from datetime import datetime
+
+        results_dir = self._results_dir or (self._case_dir / "test_results")
+        ts_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts_dir.mkdir(parents=True, exist_ok=True)
+
+        # JSON report (machine-readable)
+        (ts_dir / "report.json").write_text(
+            json.dumps(report, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # HTML report (human-readable, rendered from template)
+        (ts_dir / "report.html").write_text(
+            self._render_html(report),
+            encoding="utf-8",
+        )
+
+        logger.info(f"[Case] Report saved to {ts_dir}")

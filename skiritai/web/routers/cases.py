@@ -98,7 +98,7 @@ async def api_run_case(case_id: str):
 
         event_bus.subscribe(_ws_bridge)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        results_dir = case_dir / "results" / timestamp
+        results_dir = case_dir / "test_results" / timestamp
         try:
             report = await run_case(case_dir, execution_id=case_id, results_dir=results_dir)
             # Save result to disk
@@ -242,7 +242,7 @@ async def api_solidify_script(case_id: str, step_id: str):
 @router.get("/{case_id}/results")
 async def api_list_results(case_id: str):
     """List all execution results for a case."""
-    results_dir = CASES_ROOT / case_id / "results"
+    results_dir = CASES_ROOT / case_id / "test_results"
     if not results_dir.exists():
         return []
 
@@ -259,7 +259,7 @@ async def api_list_results(case_id: str):
 @router.get("/{case_id}/results/{timestamp}")
 async def api_get_result(case_id: str, timestamp: str):
     """Get a specific execution result."""
-    results_dir = CASES_ROOT / case_id / "results" / timestamp
+    results_dir = CASES_ROOT / case_id / "test_results" / timestamp
     if not results_dir.exists():
         raise HTTPException(status_code=404, detail="Result not found")
 
@@ -284,7 +284,7 @@ async def api_get_screenshot(case_id: str, timestamp: str, filename: str):
     """Serve a screenshot file."""
     if ".." in filename or "/" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
-    screenshot_path = CASES_ROOT / case_id / "results" / timestamp / "screenshots" / filename
+    screenshot_path = CASES_ROOT / case_id / "test_results" / timestamp / "screenshots" / filename
     if not screenshot_path.exists():
         raise HTTPException(status_code=404, detail="Screenshot not found")
     return FileResponse(screenshot_path, media_type="image/png")

@@ -29,7 +29,9 @@ Thumbs.db
 
 # Test execution results (generated at runtime)
 examples/*/results/
+examples/*/test_results/
 cases/*/results/
+cases/*/test_results/
 
 # Skiritai runtime
 .skiritai/
@@ -37,3 +39,5 @@ cases/*/results/
 
 # Test artifacts
 tests/acceptance/.case_context
+examples/*/.case_context
+cases/*/.case_context

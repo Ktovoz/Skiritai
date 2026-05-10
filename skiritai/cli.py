@@ -26,6 +26,8 @@ def main():
     # --- run ---
     run_parser = subparsers.add_parser("run", help="Run a test case")
     run_parser.add_argument("case_dir", type=str, help="Path to case directory containing case.py")
+    run_parser.add_argument("--results-dir", type=str, default=None,
+                            help="Directory to save test results (default: <case_dir>/test_results)")
 
     # --- serve ---
     serve_parser = subparsers.add_parser("serve", help="Start the web server (requires [web] extra)")
@@ -78,7 +80,9 @@ def _cmd_run(args):
         print(f"Error: case directory not found: {case_dir}")
         sys.exit(1)
 
-    report = asyncio.run(run_case(case_dir))
+    results_dir = Path(args.results_dir).resolve() if args.results_dir else None
+
+    report = asyncio.run(run_case(case_dir, results_dir=results_dir))
 
     # Print report
     print(f"\n{'=' * 60}")
