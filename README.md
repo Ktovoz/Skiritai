@@ -217,15 +217,24 @@ async def my_step(self, ai):
 await ai.action("...", mode="replay")
 ```
 
-## Author
+<div align="center">
 
-**Joe Shen** (Ktovoz)
-- GitHub: [@Ktovoz](https://github.com/Ktovoz)
+---
+
+### Author
+
+**Joe Shen**
+
+[![GitHub](https://img.shields.io/badge/GitHub-@Ktovoz-181717?logo=github&logoColor=white)](https://github.com/Ktovoz)
+
+</div>
 
 ## License
 
 [MIT](LICENSE)
 
-## Contributing
+<div align="center">
 
 Issues and Pull Requests are welcome!
+
+</div>
