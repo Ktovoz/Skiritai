@@ -35,18 +35,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-${{ matrix.python-version }}-
 
-      - name: Install dependencies
-        working-directory: backend
+      - name: Install package with dev deps
         run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx
+          pip install -e ".[dev]"
 
       - name: Run unit tests
-        working-directory: backend
         run: python -m pytest tests/unit/ -v -s --tb=short
 
   # ============================================================
@@ -68,22 +65,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-${{ matrix.python-version }}-
 
-      - name: Install dependencies
-        working-directory: backend
+      - name: Install package with dev + web deps
         run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx
+          pip install -e ".[dev,web]"
 
       - name: Run functional tests
-        working-directory: backend
         run: python -m pytest tests/functional/ -v -s --tb=short
 
       - name: Run acceptance tests
-        working-directory: backend
         run: python -m pytest tests/acceptance/ -v -s --tb=short
 
   # ============================================================
@@ -105,7 +98,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-${{ matrix.python-version }}-
 
@@ -113,19 +106,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
-      - name: Install dependencies
-        working-directory: backend
+      - name: Install package with dev + web deps
         run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx
+          pip install -e ".[dev,web]"
           playwright install --with-deps chromium
 
       - name: Run E2E tests
-        working-directory: backend
         env:
           HEADLESS: "true"
         run: python -m pytest tests/e2e/ -v -s --tb=short
@@ -148,35 +138,31 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-3.12-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-pip-3.12-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-3.12-
 
-      - name: Install dependencies
-        working-directory: backend
+      - name: Install package with dev + web deps
         run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx pytest-cov
+          pip install -e ".[dev,web]"
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('backend/requirements.txt') }}
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
       - name: Install Playwright browsers
-        working-directory: backend
         run: playwright install --with-deps chromium
 
       - name: Run all tests with coverage
-        working-directory: backend
         env:
           HEADLESS: "true"
         run: |
           python -m pytest tests/unit/ tests/functional/ tests/acceptance/ tests/e2e/ \
-            --cov=app \
+            --cov=skiritai \
             --cov-report=term \
             --cov-report=html \
             --cov-report=xml \
@@ -186,5 +172,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: backend/htmlcov/
+          path: htmlcov/
           retention-days: 7

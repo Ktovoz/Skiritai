@@ -6,8 +6,8 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - ./backend/.env
+      - .env
     environment:
       - HEADLESS=true
     volumes:
-      - ./cases:/app/cases
+      - ./examples:/app/examples
