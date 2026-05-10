@@ -81,11 +81,6 @@ def _get_step_description(case_class: type, step_name: str) -> str:
 
 # --- Execution APIs ---
 
-class RunResponse(BaseModel):
-    case_id: str
-    status: str
-    message: str
-
 
 @router.post("/{case_id}/run")
 async def api_run_case(case_id: str):

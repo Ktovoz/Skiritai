@@ -1,6 +1,6 @@
 """Test suite for perception layer, CaseContext, and replay script generation.
 
-Run: cd backend && python tests/test_perception_unit.py
+Run: python -m pytest tests/functional/test_perception_unit.py
 """
 import asyncio
 import json
@@ -11,8 +11,6 @@ import tempfile
 import pytest
 from pathlib import Path
 
-# Ensure backend/ is on sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 # ─── Test 1: CaseContext state machine ────────────────────────────────
 

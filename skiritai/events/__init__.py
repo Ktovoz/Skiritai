@@ -100,7 +100,7 @@ class EventBus:
         """Context manager for temporary subscriptions — auto-unsubscribes on exit.
 
         Usage:
-            async with event_bus.subscribed(my_handler):
+            with event_bus.subscribed(my_handler):
                 ...  # handler is active
             # handler is automatically removed here
         """

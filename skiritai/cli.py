@@ -4,6 +4,8 @@ Usage:
     skiritai run <case_dir>          Run a test case
     skiritai serve [--host] [--port]  Start the web server (requires [web] extra)
     skiritai list [cases_root]        List available test cases
+    skiritai browser status [dir]     Check persistent browser session status
+    skiritai browser cleanup [dir]    Kill orphan browser and remove session file
 """
 from __future__ import annotations
 
@@ -38,6 +40,16 @@ def main():
     list_parser.add_argument("cases_root", type=str, nargs="?", default="examples",
                              help="Root directory containing case folders (default: examples)")
 
+    # --- browser ---
+    browser_parser = subparsers.add_parser("browser", help="Manage persistent browser sessions")
+    browser_sub = browser_parser.add_subparsers(dest="browser_command", help="Browser commands")
+    status_parser = browser_sub.add_parser("status", help="Check browser session status")
+    status_parser.add_argument("case_dir", type=str, nargs="?", default=".",
+                               help="Case directory with .browser_session file (default: current dir)")
+    cleanup_parser = browser_sub.add_parser("cleanup", help="Kill orphan browser and remove session file")
+    cleanup_parser.add_argument("case_dir", type=str, nargs="?", default=".",
+                                help="Case directory with .browser_session file (default: current dir)")
+
     args = parser.parse_args()
 
     if args.command is None:
@@ -50,6 +62,8 @@ def main():
         _cmd_serve(args)
     elif args.command == "list":
         _cmd_list(args)
+    elif args.command == "browser":
+        _cmd_browser(args)
 
 
 def _cmd_run(args):
@@ -121,6 +135,56 @@ def _cmd_list(args):
         print(f"    Class: {c['name']}")
         print(f"    Steps: {', '.join(c['steps']) or '(none)'}")
         print()
+
+
+def _cmd_browser(args):
+    """Manage persistent browser sessions."""
+    from skiritai.core.browser import (
+        has_persistent_session,
+        is_browser_alive,
+        load_session,
+        kill_browser,
+        cleanup_session,
+    )
+
+    if not args.browser_command:
+        print("Usage: skiritai browser {status|cleanup} [case_dir]")
+        sys.exit(1)
+
+    case_dir = Path(args.case_dir).resolve()
+
+    if args.browser_command == "status":
+        if not has_persistent_session(case_dir):
+            print(f"No browser session found in {case_dir}")
+            return
+
+        session = load_session(case_dir)
+        if not session:
+            print(f"Session file exists but is corrupted in {case_dir}")
+            return
+
+        alive = is_browser_alive(case_dir)
+        print(f"Session file: {case_dir}/.browser_session")
+        print(f"  CDP port: {session.get('cdp_port')}")
+        print(f"  PID:      {session.get('pid')}")
+        print(f"  Status:   {'alive' if alive else 'DEAD (orphan process)'}")
+
+        if alive:
+            print(f"\n  Connect: http://127.0.0.1:{session.get('cdp_port')}")
+        else:
+            print(f"\n  Run 'skiritai browser cleanup {case_dir}' to remove stale session.")
+
+    elif args.browser_command == "cleanup":
+        if not has_persistent_session(case_dir):
+            print(f"No browser session found in {case_dir}")
+            return
+
+        killed = kill_browser(case_dir)
+        if killed:
+            print(f"Browser process killed and session file removed for {case_dir}")
+        else:
+            cleanup_session(case_dir)
+            print(f"No live process found; stale session file removed for {case_dir}")
 
 
 if __name__ == "__main__":

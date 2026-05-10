@@ -23,7 +23,6 @@ from unittest.mock import patch
 
 import pytest
 
-# Ensure backend is on path
 
 # Force headless mode for E2E tests
 os.environ["SKIRITAI_HEADLESS"] = "true"

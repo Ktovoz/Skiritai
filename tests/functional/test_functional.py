@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest  # type: ignore
 
-# Ensure backend is on path
 
 # ============================================================
 # 1. EventBus Tests
