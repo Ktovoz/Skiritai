@@ -412,24 +412,28 @@ class BaseCase:
     def get_step_methods(self) -> list[str]:
         """Auto-detect all public methods as step methods.
 
-        Every public callable that is NOT a reserved method (setup, teardown,
-        hooks, browser lifecycle, etc.) and NOT a property is treated as a step.
-        No @step decorator required.
+        Steps are discovered in definition order (Python 3.7+ __dict__ preserves
+        insertion order), so you control execution order by defining methods
+        in the sequence they should run.
         """
         steps = []
-        for name in dir(self):
-            if name.startswith("_"):
-                continue
-            if name in self._RESERVED_METHODS:
-                continue
-            attr = getattr(self.__class__, name, None)
-            if attr is None:
-                continue
-            if not callable(attr):
-                continue
-            if isinstance(attr, property):
-                continue
-            steps.append(name)
+        # Walk MRO in reverse so base classes come first, subclass overrides last.
+        # Within each class, __dict__ preserves definition order (Python 3.7+).
+        seen = set()
+        for cls in reversed(type(self).__mro__):
+            for name, attr in cls.__dict__.items():
+                if name.startswith("_"):
+                    continue
+                if name in self._RESERVED_METHODS:
+                    continue
+                if name in seen:
+                    continue
+                if not callable(attr):
+                    continue
+                if isinstance(attr, property):
+                    continue
+                seen.add(name)
+                steps.append(name)
         return steps
 
     # ---- Step execution ----

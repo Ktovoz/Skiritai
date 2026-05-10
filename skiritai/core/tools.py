@@ -32,8 +32,11 @@ async def navigate(url: str) -> str:
         url: 目标 URL
     """
     page = get_page()
-    await page.goto(url)
-    await page.wait_for_load_state("networkidle")
+    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+    try:
+        await page.wait_for_load_state("networkidle", timeout=5000)
+    except Exception:
+        pass
     return f"已导航到 {page.url}"
 
 
@@ -47,6 +50,21 @@ async def click(selector: str) -> str:
     page = get_page()
     await page.locator(selector).click()
     return f"已点击元素: {selector}"
+
+
+@register_tool
+async def click_text(text: str) -> str:
+    """通过可见文本点击元素。不需要知道 CSS 选择器，直接根据页面上显示的文字来点击。
+
+    适用场景：点击按钮、链接、菜单项等。会匹配包含该文本的第一个可见元素。
+
+    Args:
+        text: 页面上可见的文字内容，如 '登录'、'GCC Installation'
+    """
+    page = get_page()
+    locator = page.get_by_text(text, exact=False).first
+    await locator.click()
+    return f"已点击文本为 '{text}' 的元素"
 
 
 @register_tool

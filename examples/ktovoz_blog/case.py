@@ -2,13 +2,12 @@
 
 Demonstrates Skiritai's key capabilities for long-range testing:
 - Pure natural-language AI exploration (no hardcoded selectors)
-- Cross-step context sharing via self.ctx.store
 - Lifecycle hooks for observability
 - Failure policies for optional steps
-- Mixed explore/replay modes for different step types
+- Cross-step flow: navigation, discovery, verification, summary
 """
 
-from skiritai.core.base_case import BaseCase, FailurePolicy, on_failure, step_mode
+from skiritai.core.base_case import BaseCase, FailurePolicy, on_failure
 
 
 class KtovozBlogCase(BaseCase):
@@ -25,102 +24,98 @@ class KtovozBlogCase(BaseCase):
     async def teardown(self):
         await self.close_browser()
 
-    # ---- Phase 1: Site Discovery ----
+    # ---- Phase 1: Homepage Discovery ----
 
     async def open_homepage(self):
-        """Open the blog homepage and wait for it to load."""
+        """Navigate to https://ktovoz.com and wait for the page to fully load."""
         await self.ai.action("打开 https://ktovoz.com 首页，等待页面完全加载")
 
     async def verify_homepage_loaded(self):
-        """Verify the homepage renders correctly with key elements."""
+        """Verify the homepage shows title, navigation, and main content area."""
         await self.ai.action(
-            "确认首页已成功加载：检查页面标题是否存在、"
-            "是否有导航栏、是否有文章列表或主要内容区域"
+            "在当前页面（https://ktovoz.com）上检查并确认："
+            "1) 页面标题存在且包含博客相关文字 "
+            "2) 导航栏可见（如 Blog, About 等链接） "
+            "3) 页面有文章列表或主要内容区域"
         )
 
-    async def discover_site_structure(self):
-        """Use AI to analyze and record the site's navigation structure."""
+    async def discover_navigation(self):
+        """Analyze all navigation links, pages, and tag/category entries."""
         await self.ai.action(
-            "使用 analyze_page 分析页面，记录网站有哪些页面链接、"
-            "导航菜单包含哪些项目、页面上有哪些分类或标签入口。"
-            "将发现的页面数量保存到上下文。"
+            "在 https://ktovoz.com 首页，使用 analyze_page 获取所有链接和导航项。"
+            "列出：1) 主导航有哪些页面 2) 首页显示了几篇文章 "
+            "3) 有哪些标签/分类入口。将所有发现整理成清单后输出。"
         )
 
-    # ---- Phase 2: Article Browsing ----
-
-    async def browse_article_list(self):
-        """Browse the article listing and count visible articles."""
-        await self.ai.action(
-            "浏览首页的文章列表，数一数当前页面显示了多少篇文章，"
-            "并记录第一篇文章的标题文本"
-        )
+    # ---- Phase 2: Article Detail ----
 
     async def open_first_article(self):
-        """Click through to the first article's detail page."""
+        """Click the first article title to enter its detail page."""
         await self.ai.action(
-            "点击第一篇文章的标题链接，进入文章详情页面"
+            "在 https://ktovoz.com 首页，用 click_text 点击第一篇文章的标题文字，"
+            "进入文章详情页面"
         )
 
     async def verify_article_detail(self):
-        """Verify the article detail page has all expected elements."""
+        """Verify the article detail page contains title, date, body, and tags."""
         await self.ai.action(
-            "确认文章详情页包含以下要素：文章标题、发布日期或时间、"
-            "文章正文内容、以及可能的标签或分类信息"
+            "你现在应该在一个文章详情页（URL 包含 /blog/）。请在这个页面检查："
+            "1) 是否有文章标题 2) 是否有发布日期 "
+            "3) 是否有正文内容 4) 是否有标签/分类。逐项确认后报告。"
         )
 
-    # ---- Phase 3: Navigation & Site Features ----
+    # ---- Phase 3: Navigation & Sections ----
 
     async def return_to_homepage(self):
         """Navigate back to the homepage."""
-        await self.ai.action("返回网站首页")
-
-    async def explore_categories(self):
-        """Explore category or tag pages to verify content organization."""
         await self.ai.action(
-            "找到文章分类或标签的入口，点击其中一个分类，"
-            "确认该分类下的文章列表正确显示，且每篇文章都属于该分类"
+            "通过点击导航栏中的 'Kto-Blog' 或博客 logo 链接，返回 https://ktovoz.com 首页"
         )
 
     async def visit_about_page(self):
-        """Visit the About page and verify personal info is present."""
+        """Navigate to the About page and verify its content."""
         await self.ai.action(
-            "访问关于页面（About），查看博主个人信息是否完整，"
-            "包括头像、简介、社交链接等"
+            "从 https://ktovoz.com 首页，找到并点击 'About' 导航链接，"
+            "进入关于页面。确认页面上是否展示了博主信息：头像、个人简介、社交链接等。"
+            "逐项报告发现的内容。"
         )
 
-    # ---- Phase 4: Optional & Edge Cases ----
+    async def explore_tags(self):
+        """Browse one tag page and verify filtered articles."""
+        await self.ai.action(
+            "回到 https://ktovoz.com 首页，找到一个标签/分类链接（如 C++, Go, Learning 等），"
+            "点击该标签进入标签归档页。确认：该页面的文章列表已按标签筛选，"
+            "且显示的文章与标签主题相关。报告你选择的标签和看到的文章数量。"
+        )
+
+    # ---- Phase 4: Footer & Search ----
+
+    async def verify_footer(self):
+        """Scroll to page bottom and verify footer content."""
+        await self.ai.action(
+            "回到 https://ktovoz.com 首页，滚动到页面最底部。"
+            "检查页脚区域：是否有版权信息、是否有社交链接或 RSS 订阅入口。"
+            "报告页脚中所有可见信息。"
+        )
 
     @on_failure(FailurePolicy.SKIP)
     async def test_search(self):
-        """Test the search functionality if available (skip if not present)."""
+        """Test search functionality if available on the site (optional)."""
         await self.ai.action(
-            "找到搜索入口，输入一个可能存在的关键词进行搜索，"
-            "检查搜索结果页面是否返回了相关内容"
+            "在 https://ktovoz.com 首页上寻找搜索入口（搜索框或搜索图标）。"
+            "如果找到，输入关键词 'GCC' 进行搜索，检查搜索结果是否返回了相关文章。"
+            "如果没有搜索功能，直接返回 '搜索功能不可用' 并标记为跳过。"
+            "注意：只能在 ktovoz.com 域名下操作，不要导航到其他网站。"
         )
 
-    @step_mode("explore")
-    async def explore_random_article(self):
-        """Randomly explore another article to verify consistency."""
-        await self.ai.action(
-            "返回文章列表页面，随机选择另一篇文章打开，"
-            "确认文章内容完整、排版正常、没有明显的渲染问题"
-        )
-
-    async def verify_footer(self):
-        """Scroll to the bottom and check the footer section."""
-        await self.ai.action(
-            "滚动到页面最底部，检查页脚区域是否包含版权信息、"
-            "备案号（如果有）、以及社交媒体或 RSS 链接"
-        )
-
-    # ---- Phase 5: Summary ----
+    # ---- Phase 5: Final Summary ----
 
     async def final_review(self):
-        """Return to homepage and provide a final summary of the test."""
+        """Return to homepage and produce a comprehensive test summary."""
         await self.ai.action(
-            "返回首页，回顾本次测试中发现的所有页面和功能，"
-            "总结：网站包含哪些页面类型、有多少篇文章、"
-            "哪些功能正常工作、是否有任何异常"
+            "返回 https://ktovoz.com 首页。基于本次测试中发现的所有信息，"
+            "给出一份总结报告：网站主题是什么、有哪些主要页面、"
+            "大约有多少篇文章、覆盖了哪些标签/分类、网站功能是否正常。"
         )
 
     # ---- Hooks: observability for long-range tests ----
@@ -129,7 +124,7 @@ class KtovozBlogCase(BaseCase):
         print(f"\n{'='*40}")
         print(f"[KtovozBlog] >>> Starting: {step_name}")
         print(f"[KtovozBlog] Phase: {self.ctx.phase.value}")
-        print(f"[KtovozBlog] Completed so far: {len(self.ctx.completed_steps)} steps")
+        print(f"[KtovozBlog] Completed: {len(self.ctx.completed_steps)} steps")
 
     async def after_step(self, step_name: str, result: dict):
         success = result.get("success", False)

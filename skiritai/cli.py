@@ -70,6 +70,9 @@ def main():
 
 def _cmd_run(args):
     """Run a test case."""
+    from dotenv import load_dotenv
+    load_dotenv()
+
     from skiritai.core.agent_loop import register_all_tools
     register_all_tools()
 
