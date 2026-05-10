@@ -16,6 +16,9 @@ class AIContext:
 
     Each action either replays a saved script or calls the AI agent to explore.
     After exploration, a replay script is generated for future use.
+
+    In ``auto`` mode, if replay fails the context automatically falls back to
+    exploration so the step can still succeed.
     """
 
     def __init__(
@@ -53,7 +56,7 @@ class AIContext:
             description: Natural language description of what to do
             mode: Execution mode override:
                 - None      — use default_mode from @step_mode decorator or "auto"
-                - "auto"    — replay if script exists, otherwise explore
+                - "auto"    — replay if script exists; on replay failure, fallback to explore
                 - "explore" — always explore with AI, overwrite existing script
                 - "replay"  — always replay, error if no script exists
 
@@ -73,6 +76,11 @@ class AIContext:
         else:  # auto
             if self.has_replay():
                 result = await self._replay()
+                if not result.get("success"):
+                    logger.warning(
+                        f"[Auto] {self.step_id}: replay failed, falling back to explore"
+                    )
+                    result = await self._explore(description)
             else:
                 result = await self._explore(description)
         self._last_result = result
@@ -118,6 +126,7 @@ class AIContext:
             task_description=description,
             on_log=self.on_log,
             execution_id=self.execution_id,
+            case_dir=self.case_dir,
         )
 
         if result.get("success"):

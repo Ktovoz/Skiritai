@@ -4,6 +4,7 @@ from __future__ import annotations
 import inspect
 import os
 import time
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,44 @@ from app.engine.browser import (
 from app.engine.case_context import CaseContext, CasePhase
 from app.engine.event_bus import Event, event_bus
 from app.logger import logger
+
+
+# ---------------------------------------------------------------------------
+# Failure policy — controls what happens when a step fails
+# ---------------------------------------------------------------------------
+
+class FailurePolicy(str, Enum):
+    """What to do when a step fails in the run loop."""
+    ABORT = "abort"       # Stop execution (default, backward compatible)
+    SKIP = "skip"         # Skip this step and continue to the next
+    RETRY = "retry"       # Retry the step up to N times, then abort
+
+
+class StepResult:
+    """Structured result returned from hook methods to control execution flow."""
+
+    def __init__(
+        self,
+        proceed: bool = True,
+        retry: bool = False,
+        skip: bool = False,
+    ):
+        self.proceed = proceed
+        self.retry = retry
+        self.skip = skip
+
+    @classmethod
+    def continue_(cls) -> StepResult:
+        return cls(proceed=True)
+
+    @classmethod
+    def do_retry(cls) -> StepResult:
+        return cls(retry=True, proceed=False)
+
+    @classmethod
+    def do_skip(cls) -> StepResult:
+        return cls(skip=True, proceed=True)
+
 
 def step(func):
     """Decorator to explicitly mark a method as a test step.
@@ -52,6 +91,26 @@ def step_mode(mode: ActionMode):
     return decorator
 
 
+def on_failure(policy: FailurePolicy, max_retries: int = 1):
+    """Decorator to set the failure policy for a step.
+
+    Usage:
+        @on_failure(FailurePolicy.RETRY, max_retries=2)
+        async def my_step(self, ai):
+            await ai.action("do something")
+
+        @on_failure(FailurePolicy.SKIP)
+        async def optional_step(self, ai):
+            await ai.action("do something optional")
+    """
+    def decorator(func):
+        func._failure_policy = policy
+        func._max_retries = max_retries
+        func._is_step = True
+        return func
+    return decorator
+
+
 class BaseCase:
     """Base class for test cases.
 
@@ -59,6 +118,16 @@ class BaseCase:
     - setup(): launch browser, navigate to starting URL
     - teardown(): close browser
     - step methods (any async method that takes `ai` as first param)
+
+    Optional hooks to override:
+    - before_step(step_name): called before each step
+    - after_step(step_name, result): called after each step (success or failure)
+    - on_step_error(step_name, error): called when a step raises an exception
+
+    Failure policies (via @on_failure decorator):
+    - ABORT: stop execution (default)
+    - SKIP: skip failed step and continue
+    - RETRY: retry up to max_retries times before aborting
 
     Example:
         class MyCase(BaseCase):
@@ -74,6 +143,16 @@ class BaseCase:
             @step_mode("explore")
             async def search(self, ai):
                 await ai.action("搜索关键词")
+
+            @on_failure(FailurePolicy.SKIP)
+            async def optional_check(self, ai):
+                await ai.action("可选的检查")
+
+            async def before_step(self, step_name: str):
+                print(f"About to run: {step_name}")
+
+            async def after_step(self, step_name: str, result: dict):
+                print(f"Finished: {step_name} -> {result.get('summary')}")
     """
 
     def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None):
@@ -110,6 +189,11 @@ class BaseCase:
     def ctx(self) -> CaseContext:
         """Access the global case context (state machine, store, browser info)."""
         return self._ctx
+
+    @property
+    def _cdp_port(self):
+        """CDP port of the persistent browser (None when not in persistent mode)."""
+        return self._ctx.browser.cdp_port
 
     # ---- Browser lifecycle ----
 
@@ -248,6 +332,37 @@ class BaseCase:
         """Override to customize teardown. Default closes browser."""
         await self.close_browser()
 
+    # ---- Hook methods (override in subclass) ----
+
+    async def before_step(self, step_name: str) -> None:
+        """Called before each step executes.
+
+        Override to add custom pre-step logic (e.g., logging, data preparation).
+        Raising an exception here will abort the step.
+        """
+        pass
+
+    async def after_step(self, step_name: str, result: dict) -> None:
+        """Called after each step completes (whether success or failure).
+
+        Override to add custom post-step logic (e.g., cleanup, notifications).
+        Exceptions here are logged but do not affect execution flow.
+        """
+        pass
+
+    async def on_step_error(self, step_name: str, error: Exception) -> StepResult:
+        """Called when a step raises an exception.
+
+        Override to customize error handling. Return a StepResult to control
+        what happens next:
+        - StepResult.continue_(): proceed normally (result is marked failed)
+        - StepResult.do_retry(): retry this step
+        - StepResult.do_skip(): skip this step and continue to the next
+
+        Default behavior: return StepResult.continue_() (mark failed, use policy).
+        """
+        return StepResult.continue_()
+
     # ---- Step discovery ----
 
     def get_step_methods(self) -> list[str]:
@@ -259,7 +374,8 @@ class BaseCase:
             attr = getattr(self.__class__, name, None)
             if not callable(attr):
                 continue
-            if name in ("close_browser", "get_step_methods", "launch_browser", "run", "run_step", "setup", "teardown"):
+            if name in ("close_browser", "get_step_methods", "launch_browser", "run", "run_step",
+                        "setup", "teardown", "before_step", "after_step", "on_step_error"):
                 continue
             # Check for explicit @step or @step_mode decorator first
             if getattr(attr, "_is_step", False):
@@ -291,7 +407,7 @@ class BaseCase:
         )
 
     async def run_step(self, step_name: str, on_log=None) -> dict:
-        """Run a single step method."""
+        """Run a single step method with hooks."""
         method = getattr(self, step_name)
         ai = self._make_ai(step_name, on_log)
 
@@ -303,6 +419,12 @@ class BaseCase:
             execution_id=self._execution_id,
             data={"step_id": step_name},
         ))
+
+        # --- before_step hook ---
+        try:
+            await self.before_step(step_name)
+        except Exception as e:
+            logger.error(f"[Hook] before_step({step_name}) raised: {e}")
 
         try:
             result = await method(ai)
@@ -330,9 +452,24 @@ class BaseCase:
                     "summary": result.get("summary", ""),
                 },
             ))
+
+            # --- after_step hook ---
+            try:
+                await self.after_step(step_name, result)
+            except Exception as hook_exc:
+                logger.error(f"[Hook] after_step({step_name}) raised: {hook_exc}")
+
             return result
         except Exception as e:
             logger.error(f"[Step] {step_name} error: {e}")
+
+            # --- on_step_error hook ---
+            hook_result = StepResult.continue_()
+            try:
+                hook_result = await self.on_step_error(step_name, e)
+            except Exception as hook_exc:
+                logger.error(f"[Hook] on_step_error({step_name}) raised: {hook_exc}")
+
             self._ctx.failed_step = step_name
             # Auto screenshot on failure
             if self._results_dir and self._page:
@@ -344,6 +481,8 @@ class BaseCase:
                     logger.info(f"[Step] Screenshot saved: {screenshot_path}")
                 except Exception as se:
                     logger.warning(f"[Step] Failed to capture screenshot: {se}")
+
+            result = {"success": False, "summary": str(e), "_hook_result": hook_result}
             self._results.append({
                 "step_id": step_name,
                 "status": "failed",
@@ -356,14 +495,40 @@ class BaseCase:
                 execution_id=self._execution_id,
                 data={"step_id": step_name, "error": str(e)},
             ))
-            return {"success": False, "summary": str(e)}
+
+            # --- after_step hook ---
+            try:
+                await self.after_step(step_name, result)
+            except Exception as hook_exc:
+                logger.error(f"[Hook] after_step({step_name}) raised: {hook_exc}")
+
+            return result
         finally:
             self._ctx.current_step = None
 
     # ---- Main run loop ----
 
+    def _get_step_failure_policy(self, step_name: str) -> tuple[FailurePolicy, int]:
+        """Get failure policy for a step from its @on_failure decorator.
+
+        Returns:
+            (policy, max_retries) tuple
+        """
+        method = getattr(self.__class__, step_name, None)
+        if method:
+            policy = getattr(method, "_failure_policy", FailurePolicy.ABORT)
+            max_retries = getattr(method, "_max_retries", 1)
+            return (policy, max_retries)
+        return (FailurePolicy.ABORT, 1)
+
     async def run(self) -> dict:
-        """Run the full case: setup → steps → teardown."""
+        """Run the full case: setup → steps → teardown.
+
+        Supports three failure policies per step (via @on_failure decorator):
+        - ABORT: stop execution on failure (default)
+        - SKIP: skip the failed step and continue
+        - RETRY: retry the step up to max_retries times, then abort
+        """
         logger.info(f"[Case] {self.__class__.__name__}")
 
         steps = self.get_step_methods()
@@ -388,13 +553,54 @@ class BaseCase:
         # --- Running phase ---
         await self._ctx.transition("running")
         success_count = 0
+        aborted = False
+
         for step_name in steps:
-            result = await self.run_step(step_name)
-            if result.get("success"):
+            policy, max_retries = self._get_step_failure_policy(step_name)
+
+            # Determine effective attempt limit
+            attempt_limit = 1
+            if policy == FailurePolicy.RETRY:
+                attempt_limit = max_retries + 1
+
+            result = None
+            step_succeeded = False
+
+            for attempt in range(attempt_limit):
+                if attempt > 0:
+                    logger.info(f"[Case] Retrying step {step_name} (attempt {attempt + 1}/{attempt_limit})")
+
+                result = await self.run_step(step_name)
+                step_succeeded = result.get("success", False)
+
+                if step_succeeded:
+                    break
+
+                # Check on_step_error hook result for retry signal
+                hook_result = result.get("_hook_result")
+                if hook_result and isinstance(hook_result, StepResult):
+                    if hook_result.retry and attempt < attempt_limit - 1:
+                        continue  # retry the loop
+
+                if not step_succeeded and policy == FailurePolicy.RETRY and attempt < attempt_limit - 1:
+                    continue  # retry via policy
+
+            if step_succeeded:
                 success_count += 1
             else:
-                logger.error(f"[Case] Step {step_name} failed, stopping")
-                break
+                # Handle based on policy
+                if policy == FailurePolicy.SKIP:
+                    logger.warning(f"[Case] Step {step_name} failed, skipping (policy=SKIP)")
+                    # Check on_step_error hook for skip signal too
+                    hook_result = result.get("_hook_result") if result else None
+                    if hook_result and isinstance(hook_result, StepResult) and hook_result.skip:
+                        pass  # already handled
+                    continue  # move to next step
+                else:
+                    # ABORT (default) or exhausted retries
+                    logger.error(f"[Case] Step {step_name} failed, stopping (policy={policy.value})")
+                    aborted = True
+                    break
 
         # --- Teardown phase ---
         try:

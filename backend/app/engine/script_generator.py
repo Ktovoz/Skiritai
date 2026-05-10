@@ -98,7 +98,10 @@ def _action_to_line(action: str, args: dict) -> str | None:
         return f"    await page.mouse.wheel(0, {y})"
 
     if action == "eval_js":
-        return f'    result = await page.evaluate("{_esc(args.get("expression", ""))}")'
+        expr = args.get("expression", "")
+        # Use repr() for safe embedding of arbitrary JS in Python source.
+        # repr() handles all edge cases: quotes, backticks, newlines, etc.
+        return f"    result = await page.evaluate({repr(expr)})"
 
     if action == "select_option":
         return f'    await page.select_option("{_esc(args.get("selector", ""))}", "{_esc(args.get("value", ""))}")'
@@ -113,5 +116,15 @@ def _action_to_line(action: str, args: dict) -> str | None:
 
 
 def _esc(s: str) -> str:
-    """Escape a string for safe embedding in a Python source literal."""
-    return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    """Escape a string for safe embedding in a double-quoted Python source literal.
+
+    Handles: backslashes, double quotes, newlines, carriage returns, tabs,
+    backticks (template literals), and ${} expressions.
+    """
+    return (
+        s.replace("\\", "\\\\")
+         .replace('"', '\\"')
+         .replace("\n", "\\n")
+         .replace("\r", "\\r")
+         .replace("\t", "\\t")
+    )

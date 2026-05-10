@@ -302,7 +302,7 @@ class TestAIContext:
         assert 'await page.locator("#f").focus()' in script
         assert 'await page.wait_for_selector("#g", timeout=3000)' in script
         assert "await page.mouse.wheel(0, 500)" in script
-        assert 'await page.evaluate("1+1")' in script
+        assert 'await page.evaluate("1+1")' in script or "await page.evaluate('1+1')" in script
         assert 'await page.select_option("#h", "v")' in script
         assert 'await page.hover("#i")' in script
 
