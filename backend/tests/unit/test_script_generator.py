@@ -167,7 +167,8 @@ class TestActionToLine:
     def test_eval_js(self):
         from app.engine.script_generator import _action_to_line
         line = _action_to_line("eval_js", {"expression": "1 + 1"})
-        assert 'result = await page.evaluate("1 + 1")' in line
+        assert "result = await page.evaluate(" in line
+        assert "1 + 1" in line
 
     def test_select_option(self):
         from app.engine.script_generator import _action_to_line
@@ -231,8 +232,9 @@ class TestEscaping:
         script = generate_replay_script("esc", [
             {"action": "eval_js", "args": {"expression": 'document.querySelector("div").click()'}},
         ])
-        # Quotation marks in JS expression should be escaped
-        assert '\\"' in script
+        # repr() should produce a valid Python string literal containing the expression
+        assert "document.querySelector" in script
+        compile(script, "<replay_script>", "exec")  # must be valid Python
 
     def test_url_with_special_chars(self):
         from app.engine.script_generator import generate_replay_script

@@ -87,6 +87,42 @@ async def _get_dom_state() -> Any:
     return serialized_state
 
 
+def _extract_cjk_tokens(text: str) -> list[str]:
+    """Extract individual CJK characters and bigrams from text.
+
+    This enables matching Chinese descriptions like "搜索按钮" against
+    element text, even though Chinese doesn't use spaces as word boundaries.
+
+    Returns tokens in order: bigrams first (higher quality), then single chars.
+    """
+    import unicodedata
+
+    # Extract only CJK characters (preserving order)
+    cjk_chars = []
+    for ch in text:
+        cp = ord(ch)
+        if (
+            (0x4E00 <= cp <= 0x9FFF)      # CJK Unified Ideographs
+            or (0x3400 <= cp <= 0x4DBF)    # CJK Extension A
+            or (0x3000 <= cp <= 0x303F)    # CJK Symbols and Punctuation
+            or (0xF900 <= cp <= 0xFAFF)    # CJK Compatibility Ideographs
+            or (0xFF00 <= cp <= 0xFFEF)    # Halfwidth and Fullwidth Forms
+        ):
+            cjk_chars.append(ch)
+
+    if len(cjk_chars) < 2:
+        return cjk_chars
+
+    tokens = []
+    # Add bigrams (pairs of adjacent CJK characters) — these are high-quality matches
+    for i in range(len(cjk_chars) - 1):
+        tokens.append(cjk_chars[i] + cjk_chars[i + 1])
+    # Add individual characters as fallback
+    tokens.extend(cjk_chars)
+
+    return tokens
+
+
 # ---------------------------------------------------------------------------
 # Perception tools (read-only, never modify the page)
 # ---------------------------------------------------------------------------
@@ -153,7 +189,13 @@ async def find_element(description: str) -> str:
 
     # Score each interactive element against the description
     candidates = []
+
+    # Tokenize description for matching:
+    # - Split on whitespace for English-style tokens
+    # - Also extract individual CJK characters and bigrams for Chinese text
     keywords = desc.split()
+    cjk_tokens = _extract_cjk_tokens(desc)
+    all_tokens = keywords + [t for t in cjk_tokens if t not in keywords]
 
     for idx, node in selector_map.items():
         score = 0
@@ -187,16 +229,23 @@ async def find_element(description: str) -> str:
             node_id, value, tag, role, input_type
         ])).lower()
 
-        # Exact substring match
+        # Exact substring match on the full description
         if desc in all_text:
             score += 10
 
-        # Keyword match
+        # Keyword match (whitespace-split words)
         for kw in keywords:
             if len(kw) < 2:
                 continue
             if kw in all_text:
                 score += 3
+
+        # CJK character/bigram match (for Chinese text like "搜索按钮")
+        for token in cjk_tokens:
+            if len(token) >= 2 and token in all_text:
+                score += 4  # bigram match is stronger than single-char
+            elif len(token) == 1 and token in all_text:
+                score += 1  # single char match is weaker
 
         # Field-specific boosts
         for field in [aria_label, placeholder, title_attr, name_attr, node_id]:
