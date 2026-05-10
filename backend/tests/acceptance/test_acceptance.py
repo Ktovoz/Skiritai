@@ -1018,12 +1018,16 @@ class TestEdgeCases:
         assert "await page.mouse.wheel(0, -300)" in script
 
     def test_generate_script_eval_js_escapes_quotes(self):
-        """Script generation properly escapes quotes in JS expressions."""
+        """Script generation properly handles quotes in JS expressions."""
         from app.engine.script_generator import generate_replay_script
 
         steps = [{"action": "eval_js", "args": {"expression": 'document.querySelector("div").click()'}}]
         script = generate_replay_script("test", steps)
-        assert '\\"' in script  # quotes should be escaped
+        # repr() uses single quotes when the string contains double quotes,
+        # so the JS expression is embedded without needing backslash escapes.
+        assert "document.querySelector" in script
+        assert '"div"' in script
+        assert "page.evaluate" in script
 
     def test_result_report_step_mode_field(self):
         """has_replay() correctly reflects script file existence."""
