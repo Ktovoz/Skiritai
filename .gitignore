@@ -7,6 +7,7 @@ venv/
 
 # Build output
 dist/
+*.egg-info/
 
 # IDE
 .idea/
@@ -25,25 +26,14 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
 
-# TypeScript
-*.tsbuildinfo
-
-# Vite
-.vite/
-
-# Python
-*.egg-info/
-
-# Auto-generated replay scripts
-cases/*/scripts/
-backend/tests/scripts/
-
-# Test execution results
+# Test execution results (generated at runtime)
+examples/*/results/
 cases/*/results/
-examples/**/results/
-__pycache__/
+
+# Skiritai runtime
 .skiritai/
-*.egg-info/
 .pytest_cache/
+
+# Test artifacts
+tests/acceptance/.case_context
