@@ -8,12 +8,12 @@
 
 <br>
 
-[![Version](https://img.shields.io/badge/version-0.0.1-blue)](https://github.com/Ktovoz/Skiritai/releases)
+[![Version](https://img.shields.io/badge/version-0.0.3-blue)](https://github.com/Ktovoz/Skiritai/releases)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Playwright](https://img.shields.io/badge/Playwright-1.40+-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/Ktovoz/Skiritai/test.yml?branch=main&label=tests)](https://github.com/Ktovoz/Skiritai/actions/workflows/test.yml)
+[![Test Status](https://img.shields.io/github/actions/workflow/status/Ktovoz/Skiritai/test.yml?branch=main&label=test%20status)](https://github.com/Ktovoz/Skiritai/actions/workflows/test.yml)
 [![Publish](https://img.shields.io/github/actions/workflow/status/Ktovoz/Skiritai/publish.yml?branch=main&label=publish)](https://github.com/Ktovoz/Skiritai/actions/workflows/publish.yml)
 
 [English](README.md) | [中文](README_zh.md)
