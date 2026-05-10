@@ -125,8 +125,8 @@ def _esc(s: str) -> str:
     """
     return (
         s.replace("\\", "\\\\")
-         .replace('"', '\\"')
-         .replace("\n", "\\n")
-         .replace("\r", "\\r")
-         .replace("\t", "\\t")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
     )

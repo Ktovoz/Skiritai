@@ -15,9 +15,11 @@ async def login(self, ai):
     await ai.action("点击提交按钮并验证登录成功")
 ```
 
-AI Agent 使用内置工具（navigate、click、fill、page_perceive、find_element 等）来推断并执行正确的 Playwright 操作序列。探索成功后，自动生成回放脚本，后续运行可跳过 AI 直接全速执行。
+AI Agent 使用内置工具（navigate、click、fill、page_perceive、find_element 等）来推断并执行正确的 Playwright
+操作序列。探索成功后，自动生成回放脚本，后续运行可跳过 AI 直接全速执行。
 
 **参数：**
+
 - `description` — 要执行的任务的自然语言描述
 - `mode` — 可选的执行模式覆盖：`"auto"`（默认）、`"explore"` 或 `"replay"`
 
@@ -25,11 +27,11 @@ AI Agent 使用内置工具（navigate、click、fill、page_perceive、find_ele
 
 ## 执行模式
 
-| 模式 | 行为 |
-|------|----------|
-| `"auto"` | 有脚本且成功则回放；失败时回退到探索（默认） |
+| 模式          | 行为                     |
+|-------------|------------------------|
+| `"auto"`    | 有脚本且成功则回放；失败时回退到探索（默认） |
 | `"explore"` | 始终运行 AI Agent，覆盖已有回放脚本 |
-| `"replay"` | 始终运行回放脚本；无脚本时报错 |
+| `"replay"`  | 始终运行回放脚本；无脚本时报错        |
 
 通过 `@step_mode` 为每个步骤设置默认模式，或逐个调用覆盖：
 

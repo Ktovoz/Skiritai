@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 import tempfile
-import shutil
 from pathlib import Path
 
 import pytest
@@ -14,7 +14,6 @@ os.environ["SKIRITAI_HEADLESS"] = "true"
 from playwright.async_api import async_playwright
 
 from skiritai.core.ai_context import AIContext
-from skiritai.core.base_case import BaseCase
 from skiritai.core.browser import get_launch_args
 from skiritai.core.runner import run_case
 
@@ -233,6 +232,7 @@ class TestScriptRoundtrip:
 
 if __name__ == "__main__":
     import subprocess
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
         cwd=Path(__file__).resolve().parent.parent.parent,

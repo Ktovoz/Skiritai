@@ -4,10 +4,9 @@ from __future__ import annotations
 import os
 
 from skiritai.logger import logger
-
+from .anthropic_provider import AnthropicProvider
 from .base import LLMProvider
 from .openai_provider import OpenAIProvider
-from .anthropic_provider import AnthropicProvider
 
 # Registry of provider classes, keyed by name string
 _PROVIDERS: dict[str, type[LLMProvider]] = {

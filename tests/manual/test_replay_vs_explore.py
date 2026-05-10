@@ -1,14 +1,12 @@
 """Test: Replay vs Explore mode comparison with report generation."""
 import asyncio
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
-
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 # Report data collector
 report_data = {
@@ -53,9 +51,9 @@ async def test_explore_generates_scripts():
         print(f"    - {s.name}: run={has_run}, actions={has_actions}")
 
     success = (
-        report['status'] == 'completed'
-        and len(generated_scripts) == report['total_steps']
-        and all("async def run" in s.read_text() for s in generated_scripts)
+            report['status'] == 'completed'
+            and len(generated_scripts) == report['total_steps']
+            and all("async def run" in s.read_text() for s in generated_scripts)
     )
 
     # Collect report data

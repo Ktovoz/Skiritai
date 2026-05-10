@@ -26,7 +26,9 @@
 
 Skiritai is an AI-driven browser test automation framework that **scouts automation paths before executing them**.
 
-Like the ancient Skiritai who reconnoitered the terrain before the Spartan army advanced, Skiritai's agent first **explores** the target application — navigating pages, discovering UI elements, and figuring out the correct sequence of actions — then **generates replayable scripts** that can execute the same path at 30x speed without any AI inference.
+Like the ancient Skiritai who reconnoitered the terrain before the Spartan army advanced, Skiritai's agent first *
+*explores** the target application — navigating pages, discovering UI elements, and figuring out the correct sequence of
+actions — then **generates replayable scripts** that can execute the same path at 30x speed without any AI inference.
 
 ```
 Explore Mode (Scout the path)
@@ -38,21 +40,22 @@ Replay Mode (Execute the proven path)
 
 ## Key Features
 
-| Feature | Description |
-|---------|-------------|
+| Feature                   | Description                                                                               |
+|---------------------------|-------------------------------------------------------------------------------------------|
 | **Explore → Replay Loop** | AI explores and generates scripts on first run; replays them instantly on subsequent runs |
-| **30x Performance** | Replay mode skips AI inference entirely — 74s → 2.5s |
-| **Python-native Cases** | Define test cases as Python classes with decorators |
-| **Auto-Solidification** | Successful explorations are automatically saved as replayable scripts |
-| **Multi-level Fallback** | `fill` → `click_force` → `eval_js` for resilient element interaction |
-| **Flexible LLM** | Supports OpenAI, Anthropic, Qwen, and any compatible API |
-| **Optional Web UI** | FastAPI backend with REST + WebSocket for external frontends |
-| **CLI** | `skiritai run/serve/list/browser` commands |
+| **30x Performance**       | Replay mode skips AI inference entirely — 74s → 2.5s                                      |
+| **Python-native Cases**   | Define test cases as Python classes with decorators                                       |
+| **Auto-Solidification**   | Successful explorations are automatically saved as replayable scripts                     |
+| **Multi-level Fallback**  | `fill` → `click_force` → `eval_js` for resilient element interaction                      |
+| **Flexible LLM**          | Supports OpenAI, Anthropic, Qwen, and any compatible API                                  |
+| **Optional Web UI**       | FastAPI backend with REST + WebSocket for external frontends                              |
+| **CLI**                   | `skiritai run/serve/list/browser` commands                                                |
 
 ## How It Works
 
 ```python
 from skiritai import BaseCase, step_mode
+
 
 class SearchTest(BaseCase):
     async def setup(self):
@@ -184,38 +187,39 @@ skiritai browser cleanup [case_dir]   # Kill orphan browser process
 
 14 Playwright tools available to the AI agent:
 
-| Tool | Description |
-|------|-------------|
-| `navigate` | Navigate to URL |
-| `click` | Click element |
-| `click_force` | Force click (for hidden elements) |
-| `fill` | Fill input field |
-| `type_text` | Type character by character |
-| `focus` | Focus on element |
-| `get_text` | Get element text content |
+| Tool            | Description                           |
+|-----------------|---------------------------------------|
+| `navigate`      | Navigate to URL                       |
+| `click`         | Click element                         |
+| `click_force`   | Force click (for hidden elements)     |
+| `fill`          | Fill input field                      |
+| `type_text`     | Type character by character           |
+| `focus`         | Focus on element                      |
+| `get_text`      | Get element text content              |
 | `get_page_info` | Get page title, URL, and text summary |
-| `wait_for` | Wait for element to appear |
-| `scroll` | Scroll page |
-| `eval_js` | Execute JavaScript |
-| `select_option` | Select dropdown option |
-| `hover` | Hover over element |
-| `screenshot` | Capture page screenshot |
+| `wait_for`      | Wait for element to appear            |
+| `scroll`        | Scroll page                           |
+| `eval_js`       | Execute JavaScript                    |
+| `select_option` | Select dropdown option                |
+| `hover`         | Hover over element                    |
+| `screenshot`    | Capture page screenshot               |
 
 ## Execution Modes
 
 Control how each step executes via `ai.action()` or the `@step_mode` decorator:
 
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| `auto` (default) | Replay if script exists, otherwise explore | Most steps |
-| `explore` | Always use AI, overwrite existing script | New features, re-exploration |
-| `replay` | Always replay, error if no script | CI/CD regression |
+| Mode             | Behavior                                   | Use Case                     |
+|------------------|--------------------------------------------|------------------------------|
+| `auto` (default) | Replay if script exists, otherwise explore | Most steps                   |
+| `explore`        | Always use AI, overwrite existing script   | New features, re-exploration |
+| `replay`         | Always replay, error if no script          | CI/CD regression             |
 
 ```python
 # Via decorator
 @step_mode("explore")
 async def my_step(self, ai):
     await ai.action("...")
+
 
 # Via parameter (overrides decorator)
 await ai.action("...", mode="replay")

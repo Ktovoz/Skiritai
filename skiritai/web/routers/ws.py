@@ -3,8 +3,8 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from skiritai.core.execution_manager import cancel_execution
-from skiritai.web.ws_manager import ws_manager
 from skiritai.logger import logger
+from skiritai.web.ws_manager import ws_manager
 
 router = APIRouter(tags=["websocket"])
 

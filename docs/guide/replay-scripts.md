@@ -1,6 +1,7 @@
 # Replay Scripts
 
-After exploration, the AI agent generates standalone Python scripts that replay the exact same actions — at ~30x speed, with zero LLM overhead.
+After exploration, the AI agent generates standalone Python scripts that replay the exact same actions — at ~30x speed,
+with zero LLM overhead.
 
 ## How It Works
 
@@ -66,15 +67,16 @@ await module.run(page, context)
 
 ## Read-Only Tool Filtering
 
-Replay scripts only include **action** tools (navigate, click, fill, etc.). **Perception** and read-only tools are excluded:
+Replay scripts only include **action** tools (navigate, click, fill, etc.). **Perception** and read-only tools are
+excluded:
 
-| Excluded tool | Reason |
-|---------------|--------|
+| Excluded tool   | Reason                                             |
+|-----------------|----------------------------------------------------|
 | `page_perceive` | Read-only DOM analysis, not needed at replay speed |
-| `find_element` | Read-only search, selectors already determined |
-| `get_page_info` | Read-only metadata |
-| `get_text` | Read-only content extraction |
-| `response` | Final summary, not an action |
+| `find_element`  | Read-only search, selectors already determined     |
+| `get_page_info` | Read-only metadata                                 |
+| `get_text`      | Read-only content extraction                       |
+| `response`      | Final summary, not an action                       |
 
 ## Script Management API
 

@@ -1,10 +1,13 @@
 # Perception Layer
 
-Skiritai's perception layer gives the AI agent structured page understanding via [browser-use](https://github.com/browser-use/browser-use)'s CDP-based DOM serialization engine.
+Skiritai's perception layer gives the AI agent structured page understanding
+via [browser-use](https://github.com/browser-use/browser-use)'s CDP-based DOM serialization engine.
 
 ## Overview
 
-Instead of relying on Playwright's `page.evaluate()` for DOM traversal, the perception layer uses Chrome DevTools Protocol (CDP) to serialize the full page into a structured tree of interactive elements — each annotated with CSS selectors, text, roles, and attributes.
+Instead of relying on Playwright's `page.evaluate()` for DOM traversal, the perception layer uses Chrome DevTools
+Protocol (CDP) to serialize the full page into a structured tree of interactive elements — each annotated with CSS
+selectors, text, roles, and attributes.
 
 ## Architecture
 
@@ -28,16 +31,17 @@ Python Process
     └───────────────────────┘
 ```
 
-Chrome supports **multiple concurrent CDP clients** — Playwright and browser-use operate independently over the same port.
+Chrome supports **multiple concurrent CDP clients** — Playwright and browser-use operate independently over the same
+port.
 
 ## Perception Mode
 
 The perception layer availability depends on the browser mode:
 
-| Browser Mode | Perception | Fallback |
-|-------------|------------|----------|
+| Browser Mode     | Perception             | Fallback            |
+|------------------|------------------------|---------------------|
 | Persistent (CDP) | browser-use DomService | Playwright evaluate |
-| Standard | Not available | Playwright evaluate |
+| Standard         | Not available          | Playwright evaluate |
 
 Access via `self.ctx.perception_mode`:
 
@@ -86,15 +90,17 @@ Natural-language element search with specialized CJK scoring:
 
 `find_element` uses a specialized scoring algorithm for Chinese, Japanese, and Korean text:
 
-1. **Bigram extraction** — Adjacent CJK characters form bigrams (e.g., "搜索", "按钮") that are matched as compound tokens
-2. **Unicode range detection** — Identifies CJK Unified Ideographs, Extension A, Symbols, Compatibility Ideographs, and Fullwidth Forms
+1. **Bigram extraction** — Adjacent CJK characters form bigrams (e.g., "搜索", "按钮") that are matched as compound
+   tokens
+2. **Unicode range detection** — Identifies CJK Unified Ideographs, Extension A, Symbols, Compatibility Ideographs, and
+   Fullwidth Forms
 3. **Weighted scoring**:
-   - Exact substring match: +10
-   - CJK bigram match: +4 (higher quality)
-   - Single CJK char match: +1 (lower quality, fallback)
-   - Whitespace-split keyword match: +3
-   - Match in aria-label/placeholder/name/id: +5
-   - Match in role/type: +3
+    - Exact substring match: +10
+    - CJK bigram match: +4 (higher quality)
+    - Single CJK char match: +1 (lower quality, fallback)
+    - Whitespace-split keyword match: +3
+    - Match in aria-label/placeholder/name/id: +5
+    - Match in role/type: +3
 
 ## Perception in AI Workflows
 

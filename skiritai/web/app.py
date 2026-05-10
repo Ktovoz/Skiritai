@@ -3,12 +3,12 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from skiritai.logger import logger
 from skiritai.core.agent_loop import register_all_tools
 from skiritai.web.routers import cases, ws
 
@@ -34,9 +34,9 @@ def create_app(cases_root: Path | None = None) -> FastAPI:
     app = FastAPI(title="Skiritai", description="AI 驱动的测试自动化智能体")
 
     cors_origins_str = (
-        os.getenv("SKIRITAI_CORS_ORIGINS")
-        or os.getenv("CORS_ALLOWED_ORIGINS")
-        or "http://localhost:5173,http://localhost:5174,http://localhost:5175"
+            os.getenv("SKIRITAI_CORS_ORIGINS")
+            or os.getenv("CORS_ALLOWED_ORIGINS")
+            or "http://localhost:5173,http://localhost:5174,http://localhost:5175"
     )
     allow_origins = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
 

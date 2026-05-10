@@ -1,6 +1,7 @@
 # Event Bus
 
-The Event Bus (`skiritai.events`) provides async publish-subscribe messaging between the execution engine and external observers (like the WebSocket server).
+The Event Bus (`skiritai.events`) provides async publish-subscribe messaging between the execution engine and external
+observers (like the WebSocket server).
 
 ## Features
 
@@ -45,15 +46,15 @@ with bus.subscribed(handle_step, ["step_completed"]):
 
 ## Event Types
 
-| Event | Description |
-|-------|-------------|
-| `step_started` | A step began execution |
-| `step_completed` | A step completed successfully |
-| `step_failed` | A step failed with an error |
-| `tool_called` | The AI agent called a Playwright/perception tool |
-| `execution_started` | The full test case execution began |
-| `execution_completed` | The full test case execution finished |
-| `log_message` | A log message from the execution engine |
+| Event                 | Description                                      |
+|-----------------------|--------------------------------------------------|
+| `step_started`        | A step began execution                           |
+| `step_completed`      | A step completed successfully                    |
+| `step_failed`         | A step failed with an error                      |
+| `tool_called`         | The AI agent called a Playwright/perception tool |
+| `execution_started`   | The full test case execution began               |
+| `execution_completed` | The full test case execution finished            |
+| `log_message`         | A log message from the execution engine          |
 
 ## Module-Level Singleton
 

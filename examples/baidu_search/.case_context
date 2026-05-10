@@ -1,0 +1,45 @@
+{
+  "execution_id": "baidu_search",
+  "phase": "done",
+  "perception_mode": "playwright_fallback",
+  "browser": {
+    "mode": "",
+    "cdp_port": null,
+    "pid": null,
+    "started_at": 1778409703.521205,
+    "ws_endpoint": null
+  },
+  "store": {},
+  "current_step": null,
+  "completed_steps": [
+    "open_baidu",
+    "search_keyword",
+    "verify_results"
+  ],
+  "failed_step": null,
+  "started_at": 1778409702.994101,
+  "finished_at": 1778409705.569064,
+  "elapsed_seconds": 2.57,
+  "phase_history": [
+    [
+      "idle",
+      1778409702.9936872
+    ],
+    [
+      "setup",
+      1778409702.994078
+    ],
+    [
+      "running",
+      1778409703.521386
+    ],
+    [
+      "teardown",
+      1778409705.516605
+    ],
+    [
+      "done",
+      1778409705.569032
+    ]
+  ]
+}

@@ -226,7 +226,7 @@ class TestCaseContextStateMachine:
             asyncio.run(ctx.transition("running"))
 
     def test_final_states_cannot_transition(self):
-        from skiritai.core.case_context import CaseContext, StateError, CasePhase
+        from skiritai.core.case_context import CaseContext, StateError
 
         # DONE is terminal
         ctx = CaseContext(case_dir=Path("/tmp/test"))
@@ -581,6 +581,7 @@ class TestCaseContextConstructor:
 
 if __name__ == "__main__":
     import subprocess
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
         cwd=Path(__file__).resolve().parent.parent.parent,

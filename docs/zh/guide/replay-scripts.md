@@ -68,13 +68,13 @@ await module.run(page, context)
 
 回放脚本仅包含**操作**工具（navigate、click、fill 等）。**感知**和只读工具被排除：
 
-| 排除的工具 | 原因 |
-|---------------|--------|
+| 排除的工具           | 原因               |
+|-----------------|------------------|
 | `page_perceive` | 只读 DOM 分析，回放时不需要 |
-| `find_element` | 只读搜索，选择器已确定 |
-| `get_page_info` | 只读元数据 |
-| `get_text` | 只读内容提取 |
-| `response` | 最终摘要，非操作 |
+| `find_element`  | 只读搜索，选择器已确定      |
+| `get_page_info` | 只读元数据            |
+| `get_text`      | 只读内容提取           |
+| `response`      | 最终摘要，非操作         |
 
 ## 脚本管理 API
 

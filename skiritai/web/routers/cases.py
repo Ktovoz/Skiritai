@@ -10,11 +10,11 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from skiritai.events import event_bus
 from skiritai.core.execution_manager import cancel_execution, register_execution, unregister_execution
 from skiritai.core.runner import discover_case_class, list_cases, run_case
-from skiritai.web.ws_manager import ws_manager
+from skiritai.events import event_bus
 from skiritai.logger import logger
+from skiritai.web.ws_manager import ws_manager
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 

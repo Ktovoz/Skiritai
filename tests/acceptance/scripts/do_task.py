@@ -1,6 +1,7 @@
 """Auto-generated replay script — can be run independently."""
 import asyncio
 import os
+
 from playwright.async_api import async_playwright
 
 
@@ -21,5 +22,6 @@ if __name__ == "__main__":
         finally:
             await browser.close()
             await pw.stop()
+
 
     asyncio.run(main())

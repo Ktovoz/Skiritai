@@ -17,7 +17,8 @@ class MyTest(BaseCase):
 
 ## Persistent Mode
 
-The browser launches as an **independent subprocess** via Chrome DevTools Protocol (CDP). It survives Python restarts, crashes, and disconnections. You can disconnect and reconnect at will.
+The browser launches as an **independent subprocess** via Chrome DevTools Protocol (CDP). It survives Python restarts,
+crashes, and disconnections. You can disconnect and reconnect at will.
 
 ```python
 class MyTest(BaseCase):

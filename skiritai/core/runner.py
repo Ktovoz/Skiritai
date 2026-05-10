@@ -28,9 +28,9 @@ def discover_case_class(case_dir: Path) -> type[BaseCase]:
     # Find the BaseCase subclass
     for name, obj in vars(module).items():
         if (
-            isinstance(obj, type)
-            and issubclass(obj, BaseCase)
-            and obj is not BaseCase
+                isinstance(obj, type)
+                and issubclass(obj, BaseCase)
+                and obj is not BaseCase
         ):
             return obj
 
@@ -38,10 +38,10 @@ def discover_case_class(case_dir: Path) -> type[BaseCase]:
 
 
 async def run_case(
-    case_dir: Path,
-    on_log=None,
-    execution_id: str | None = None,
-    results_dir: Path | None = None,
+        case_dir: Path,
+        on_log=None,
+        execution_id: str | None = None,
+        results_dir: Path | None = None,
 ) -> dict:
     """Run a Python-based test case.
 

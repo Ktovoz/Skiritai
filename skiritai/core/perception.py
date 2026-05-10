@@ -15,10 +15,8 @@ via independent WebSocket connections (Chrome supports multiple CDP clients).
 """
 from __future__ import annotations
 
-import json
-from typing import Any
-
 import contextvars
+from typing import Any
 
 from skiritai.core.tool_registry import register_tool
 from skiritai.logger import logger
@@ -95,18 +93,17 @@ def _extract_cjk_tokens(text: str) -> list[str]:
 
     Returns tokens in order: bigrams first (higher quality), then single chars.
     """
-    import unicodedata
 
     # Extract only CJK characters (preserving order)
     cjk_chars = []
     for ch in text:
         cp = ord(ch)
         if (
-            (0x4E00 <= cp <= 0x9FFF)      # CJK Unified Ideographs
-            or (0x3400 <= cp <= 0x4DBF)    # CJK Extension A
-            or (0x3000 <= cp <= 0x303F)    # CJK Symbols and Punctuation
-            or (0xF900 <= cp <= 0xFAFF)    # CJK Compatibility Ideographs
-            or (0xFF00 <= cp <= 0xFFEF)    # Halfwidth and Fullwidth Forms
+                (0x4E00 <= cp <= 0x9FFF)  # CJK Unified Ideographs
+                or (0x3400 <= cp <= 0x4DBF)  # CJK Extension A
+                or (0x3000 <= cp <= 0x303F)  # CJK Symbols and Punctuation
+                or (0xF900 <= cp <= 0xFAFF)  # CJK Compatibility Ideographs
+                or (0xFF00 <= cp <= 0xFFEF)  # Halfwidth and Fullwidth Forms
         ):
             cjk_chars.append(ch)
 

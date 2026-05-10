@@ -24,26 +24,27 @@ async def my_action(self, ai):
     await ai.action("navigate to the login page and enter credentials")
 ```
 
-Methods without `@step` that have `ai` as their second parameter still work for backward compatibility, but `@step` is recommended.
+Methods without `@step` that have `ai` as their second parameter still work for backward compatibility, but `@step` is
+recommended.
 
 ### `@step_mode(mode)`
 
 Controls execution mode for a step:
 
-| Mode | Behavior |
-|------|----------|
-| `"auto"` | Replay if script exists and succeeds; fall back to explore on failure (default) |
-| `"explore"` | Always use AI agent, overwrite existing replay script |
-| `"replay"` | Always use replay script; error if no script exists |
+| Mode        | Behavior                                                                        |
+|-------------|---------------------------------------------------------------------------------|
+| `"auto"`    | Replay if script exists and succeeds; fall back to explore on failure (default) |
+| `"explore"` | Always use AI agent, overwrite existing replay script                           |
+| `"replay"`  | Always use replay script; error if no script exists                             |
 
 ### `@on_failure(policy, max_retries=1)`
 
 Sets failure handling for a step:
 
-| Policy | Behavior |
-|--------|----------|
-| `FailurePolicy.ABORT` | Stop all execution immediately (default) |
-| `FailurePolicy.SKIP` | Skip this step and continue to the next |
+| Policy                | Behavior                                                 |
+|-----------------------|----------------------------------------------------------|
+| `FailurePolicy.ABORT` | Stop all execution immediately (default)                 |
+| `FailurePolicy.SKIP`  | Skip this step and continue to the next                  |
 | `FailurePolicy.RETRY` | Retry the step up to `max_retries` times before aborting |
 
 ```python

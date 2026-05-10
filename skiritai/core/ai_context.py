@@ -22,13 +22,13 @@ class AIContext:
     """
 
     def __init__(
-        self,
-        page: Any,
-        case_dir: Path,
-        step_id: str,
-        on_log: Callable | None = None,
-        default_mode: ActionMode = "auto",
-        execution_id: str = "default",
+            self,
+            page: Any,
+            case_dir: Path,
+            step_id: str,
+            on_log: Callable | None = None,
+            default_mode: ActionMode = "auto",
+            execution_id: str = "default",
     ):
         self.page = page
         self.case_dir = case_dir

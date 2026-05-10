@@ -15,7 +15,8 @@ import pytest
 class TestBaseCase:
     """Test step discovery, decorator, and lifecycle."""
 
-    def test_step_discovery_finds_ai_methods(self):
+    def test_step_discovery_auto_detects_all_public_methods(self):
+        """Public methods are auto-detected as steps (no @step or 'ai' param needed)."""
         from skiritai.core.base_case import BaseCase, step_mode
 
         class MyCase(BaseCase):
@@ -25,16 +26,16 @@ class TestBaseCase:
             async def teardown(self):
                 pass
 
-            async def open_page(self, ai):
-                """Open the home page."""
-                pass
+            async def open_page(self):
+                """Open the home page — auto-detected."""
 
             @step_mode("explore")
-            async def search(self, ai):
+            async def search(self):
                 """Search for keywords."""
                 pass
 
-            def not_a_step(self):
+            def helper_method(self):
+                """Public helpers are also detected — use _prefix for non-steps."""
                 pass
 
         case = MyCase()
@@ -42,9 +43,9 @@ class TestBaseCase:
 
         assert "open_page" in steps
         assert "search" in steps
+        assert "helper_method" in steps  # all public methods are steps
         assert "setup" not in steps
         assert "teardown" not in steps
-        assert "not_a_step" not in steps  # no 'ai' param
         assert "get_step_methods" not in steps
 
     def test_step_mode_decorator_sets_mode(self):
@@ -52,10 +53,9 @@ class TestBaseCase:
 
         class MyCase(BaseCase):
             @step_mode("explore")
-            async def my_step(self, ai):
+            async def my_step(self):
                 pass
 
-        case = MyCase()
         method = getattr(MyCase, "my_step")
         assert getattr(method, "_step_mode", "auto") == "explore"
 
@@ -63,10 +63,9 @@ class TestBaseCase:
         from skiritai.core.base_case import BaseCase
 
         class MyCase(BaseCase):
-            async def my_step(self, ai):
+            async def my_step(self):
                 pass
 
-        case = MyCase()
         method = getattr(MyCase, "my_step")
         assert getattr(method, "_step_mode", "auto") == "auto"
 
@@ -137,8 +136,8 @@ class TestPyCaseRunner:
             })
 
             with patch(
-                "skiritai.core.runner.discover_case_class",
-                return_value=FakeCase,
+                    "skiritai.core.runner.discover_case_class",
+                    return_value=FakeCase,
             ):
                 with patch.object(FakeCase, "__new__", return_value=mock_instance):
                     results_dir = Path(tmpdir) / "results"
@@ -207,6 +206,21 @@ class TestBrowserConfig:
             if old2:
                 os.environ["CHROME_PATH"] = old2
 
+    def test_headless_per_case_override(self):
+        """Per-case headless=True overrides env var."""
+        old = os.environ.get("SKIRITAI_HEADLESS")
+        os.environ["SKIRITAI_HEADLESS"] = "false"  # env says headful
+        try:
+            from skiritai.core.browser import get_launch_args
+
+            args = get_launch_args(headless=True)
+            assert args["headless"] is True  # per-case wins
+        finally:
+            if old is None:
+                os.environ.pop("SKIRITAI_HEADLESS", None)
+            else:
+                os.environ["SKIRITAI_HEADLESS"] = old
+
 
 class TestLoggerConfig:
     """Test logger configuration."""
@@ -242,13 +256,12 @@ class TestToolRegistry:
 
     def test_tools_are_registered(self):
         from skiritai.core.tool_registry import ToolRegistry
-        import skiritai.core.tools  # triggers registration
 
         registry = ToolRegistry()
         tools = registry.get_all()
 
         tool_names = [t.name for t in tools]
-        assert len(tools) >= 13  # 13 tools + possible screenshot
+        assert len(tools) >= 14  # 14+ tools including analyze_page
         assert "navigate" in tool_names
         assert "click" in tool_names
         assert "fill" in tool_names
@@ -257,7 +270,6 @@ class TestToolRegistry:
 
     def test_tool_registry_is_singleton(self):
         from skiritai.core.tool_registry import ToolRegistry
-        import skiritai.core.tools
 
         r1 = ToolRegistry()
         r2 = ToolRegistry()
@@ -266,6 +278,7 @@ class TestToolRegistry:
 
 if __name__ == "__main__":
     import subprocess
+
     result = subprocess.run(
         [sys.executable, "-m", pytest.__file__, "-v", "--tb=short", "--no-header"],
         cwd=Path(__file__).resolve().parent.parent.parent,

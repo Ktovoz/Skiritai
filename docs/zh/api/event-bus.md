@@ -45,15 +45,15 @@ with bus.subscribed(handle_step, ["step_completed"]):
 
 ## 事件类型
 
-| 事件 | 描述 |
-|-------|-------------|
-| `step_started` | 步骤开始执行 |
-| `step_completed` | 步骤执行成功 |
-| `step_failed` | 步骤执行失败，带有错误信息 |
-| `tool_called` | AI Agent 调用了 Playwright/感知工具 |
-| `execution_started` | 完整用例执行开始 |
-| `execution_completed` | 完整用例执行结束 |
-| `log_message` | 执行引擎的日志消息 |
+| 事件                    | 描述                           |
+|-----------------------|------------------------------|
+| `step_started`        | 步骤开始执行                       |
+| `step_completed`      | 步骤执行成功                       |
+| `step_failed`         | 步骤执行失败，带有错误信息                |
+| `tool_called`         | AI Agent 调用了 Playwright/感知工具 |
+| `execution_started`   | 完整用例执行开始                     |
+| `execution_completed` | 完整用例执行结束                     |
+| `log_message`         | 执行引擎的日志消息                    |
 
 ## 模块级单例
 

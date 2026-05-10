@@ -19,8 +19,8 @@ from skiritai.logger import logger
 @dataclass
 class Event:
     """A single event."""
-    type: str                    # e.g. "step_started", "step_completed", "log_message"
-    execution_id: str            # Which execution this belongs to
+    type: str  # e.g. "step_started", "step_completed", "log_message"
+    execution_id: str  # Which execution this belongs to
     data: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
@@ -113,6 +113,7 @@ class EventBus:
                 yield
             finally:
                 self.unsubscribe(handler)
+
         return _ctx()
 
     async def publish(self, event: Event) -> None:

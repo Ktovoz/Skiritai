@@ -90,10 +90,13 @@ class TestWSManager:
         events = [
             Event(type="execution_started", execution_id="e1", data={}),
             Event(type="step_started", execution_id="e1", data={"step_id": "open"}),
-            Event(type="tool_called", execution_id="e1", data={"tool_name": "navigate", "tool_args": {"url": "http://x.com"}}),
-            Event(type="step_completed", execution_id="e1", data={"step_id": "open", "mode": "explore", "summary": "ok"}),
+            Event(type="tool_called", execution_id="e1",
+                  data={"tool_name": "navigate", "tool_args": {"url": "http://x.com"}}),
+            Event(type="step_completed", execution_id="e1",
+                  data={"step_id": "open", "mode": "explore", "summary": "ok"}),
             Event(type="step_started", execution_id="e1", data={"step_id": "click"}),
-            Event(type="step_completed", execution_id="e1", data={"step_id": "click", "mode": "replay", "summary": "done"}),
+            Event(type="step_completed", execution_id="e1",
+                  data={"step_id": "click", "mode": "replay", "summary": "done"}),
             Event(type="execution_completed", execution_id="e1", data={"report": {"status": "completed"}}),
         ]
 

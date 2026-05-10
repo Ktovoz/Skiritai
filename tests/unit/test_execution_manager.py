@@ -25,6 +25,7 @@ class TestRegisterExecution:
 
         async def _test():
             _ensure_clean()
+
             async def dummy():
                 await asyncio.sleep(60)
 
@@ -44,6 +45,7 @@ class TestRegisterExecution:
 
         async def _test():
             _ensure_clean()
+
             async def dummy():
                 await asyncio.sleep(60)
 
@@ -71,6 +73,7 @@ class TestRegisterExecution:
 
         async def _test():
             _ensure_clean()
+
             async def quick():
                 pass
 
@@ -95,6 +98,7 @@ class TestCancelExecution:
 
         async def _test():
             _ensure_clean()
+
             async def dummy():
                 await asyncio.sleep(60)
 
@@ -119,6 +123,7 @@ class TestCancelExecution:
 
         async def _test():
             _ensure_clean()
+
             async def quick():
                 pass
 
@@ -155,6 +160,7 @@ class TestUnregisterExecution:
 
         async def _test():
             _ensure_clean()
+
             async def dummy():
                 await asyncio.sleep(60)
 
@@ -192,6 +198,7 @@ class TestExecutionLifecycle:
 
         async def _test():
             _ensure_clean()
+
             async def work():
                 await asyncio.sleep(60)
 
@@ -223,6 +230,7 @@ class TestExecutionLifecycle:
 
         async def _test():
             _ensure_clean()
+
             async def work():
                 await asyncio.sleep(60)
 
@@ -260,6 +268,7 @@ class TestExecutionLifecycle:
 
 if __name__ == "__main__":
     import subprocess
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
         cwd=Path(__file__).resolve().parent.parent.parent,

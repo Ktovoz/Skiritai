@@ -50,13 +50,20 @@ def _unregister_pid(pid: int) -> None:
             pass
 
 
-def get_launch_args() -> dict:
+def get_launch_args(headless: bool | None = None) -> dict:
     """Get Playwright launch args.
 
-    Reads HEADLESS env var (true/false, default false) for headless mode.
+    Resolution order for headless:
+        1. Explicit parameter (per-case override)
+        2. SKIRITAI_HEADLESS env var
+        3. HEADLESS env var
+        4. Default: false (headful / 有头模式)
+
     Reads CHROME_PATH env var for custom Chrome executable path.
     """
-    headless = (os.getenv("SKIRITAI_HEADLESS") or os.getenv("HEADLESS", "false")).lower() in ("true", "1", "yes")
+    if headless is None:
+        headless = (os.getenv("SKIRITAI_HEADLESS") or os.getenv("HEADLESS", "false")).lower() in ("true", "1", "yes")
+
     in_ci = os.getenv("CI", "").lower() in ("true", "1")
     chrome_args = ["--disable-blink-features=AutomationControlled"]
     if in_ci:
@@ -150,7 +157,7 @@ def _wait_for_cdp(port: int, timeout: float = 10.0) -> bool:
     while time.time() < deadline:
         try:
             with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/json/version", timeout=2
+                    f"http://127.0.0.1:{port}/json/version", timeout=2
             ) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 if data.get("webSocketDebuggerUrl"):
@@ -161,7 +168,7 @@ def _wait_for_cdp(port: int, timeout: float = 10.0) -> bool:
     return False
 
 
-async def launch_browser_server(pw, case_dir: Path):
+async def launch_browser_server(pw, case_dir: Path, headless: bool | None = None):
     """Launch Chromium as an independent subprocess with CDP enabled.
 
     The browser runs as a separate process — it survives when the Python
@@ -170,11 +177,12 @@ async def launch_browser_server(pw, case_dir: Path):
     Args:
         pw: Playwright instance (for getting the Chromium path)
         case_dir: Directory to persist the session file
+        headless: Per-case override (None = use env var)
 
     Returns:
         (cdp_port, browser, context, page) tuple
     """
-    launch_args = get_launch_args()
+    launch_args = get_launch_args(headless)
     extra_args = launch_args.get("args", [])
     chrome_path = launch_args.get("executable_path") or _get_chromium_path(pw)
     headless = launch_args["headless"]

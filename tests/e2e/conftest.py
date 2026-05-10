@@ -13,7 +13,6 @@ import pytest
 # Force headless mode for E2E tests
 os.environ["SKIRITAI_HEADLESS"] = "true"
 
-
 # ============================================================
 # Test HTML Page
 # ============================================================

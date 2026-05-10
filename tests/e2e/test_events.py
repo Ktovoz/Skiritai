@@ -1,7 +1,6 @@
 """E2E tests — event sequencing with real browser."""
 from __future__ import annotations
 
-import asyncio
 import os
 import shutil
 import sys
@@ -12,7 +11,6 @@ import pytest
 
 os.environ["SKIRITAI_HEADLESS"] = "true"
 
-from skiritai.core.base_case import BaseCase
 from skiritai.core.runner import run_case
 from skiritai.events import Event, event_bus
 
@@ -109,6 +107,7 @@ class TestEventSequencing:
 
 if __name__ == "__main__":
     import subprocess
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
         cwd=Path(__file__).resolve().parent.parent.parent,

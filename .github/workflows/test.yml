@@ -2,9 +2,9 @@ name: Tests
 
 on:
   push:
-    branches: [main, dev]
+    branches: [ main, dev ]
   pull_request:
-    branches: [main, dev]
+    branches: [ main, dev ]
 
 # Inject secrets as env vars for LLM-dependent tests
 env:
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12"]
+        python-version: [ "3.12" ]
     steps:
       - uses: actions/checkout@v4
 
@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12"]
+        python-version: [ "3.12" ]
     steps:
       - uses: actions/checkout@v4
 
@@ -86,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12"]
+        python-version: [ "3.12" ]
     steps:
       - uses: actions/checkout@v4
 
@@ -124,7 +124,7 @@ jobs:
   # Coverage: 汇总覆盖率报告（在所有测试完成后运行）
   # ============================================================
   coverage:
-    needs: [unit, functional-and-acceptance, e2e]
+    needs: [ unit, functional-and-acceptance, e2e ]
     if: always()
     runs-on: ubuntu-latest
     steps:

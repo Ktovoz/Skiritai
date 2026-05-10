@@ -4,11 +4,11 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-
 # Cleanup generated scripts before test session
 _SCRIPTS_DIR = Path(__file__).resolve().parent / "scripts"
 if _SCRIPTS_DIR.exists():
     import shutil
+
     shutil.rmtree(_SCRIPTS_DIR)
 
 
@@ -60,5 +60,6 @@ async def _noop_teardown(self):
 def _make_step_fn(name):
     async def step(self, ai):
         return await ai.action(f"do {name}")
+
     step.__name__ = name
     return step

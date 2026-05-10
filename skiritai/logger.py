@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+
 from loguru import logger
 
 LOG_DIR = Path(os.getenv("SKIRITAI_LOG_DIR", ".skiritai/logs"))

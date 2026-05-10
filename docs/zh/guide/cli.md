@@ -10,6 +10,7 @@ skiritai run . --case my_test.py
 ```
 
 选项：
+
 - `--case` — 运行指定的用例文件
 - `cases_root` — 测试用例所在目录
 

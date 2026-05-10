@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import inspect
-import os
 import time
 from enum import Enum
 from pathlib import Path
@@ -15,11 +14,10 @@ from skiritai.core.browser import (
     connect_to_browser,
     get_launch_args,
     has_persistent_session,
-    is_browser_alive,
     kill_browser,
     launch_browser_server,
 )
-from skiritai.core.case_context import CaseContext, CasePhase
+from skiritai.core.case_context import CaseContext
 from skiritai.events import Event, event_bus
 from skiritai.logger import logger
 
@@ -30,19 +28,19 @@ from skiritai.logger import logger
 
 class FailurePolicy(str, Enum):
     """What to do when a step fails in the run loop."""
-    ABORT = "abort"       # Stop execution (default, backward compatible)
-    SKIP = "skip"         # Skip this step and continue to the next
-    RETRY = "retry"       # Retry the step up to N times, then abort
+    ABORT = "abort"  # Stop execution (default, backward compatible)
+    SKIP = "skip"  # Skip this step and continue to the next
+    RETRY = "retry"  # Retry the step up to N times, then abort
 
 
 class StepResult:
     """Structured result returned from hook methods to control execution flow."""
 
     def __init__(
-        self,
-        proceed: bool = True,
-        retry: bool = False,
-        skip: bool = False,
+            self,
+            proceed: bool = True,
+            retry: bool = False,
+            skip: bool = False,
     ):
         self.proceed = proceed
         self.retry = retry
@@ -62,15 +60,19 @@ class StepResult:
 
 
 def step(func):
-    """Decorator to explicitly mark a method as a test step.
+    """Decorator to explicitly mark a method as a test step (OPTIONAL).
 
-    Usage:
+    All public methods are auto-detected as steps, so @step is purely
+    for documentation / explicitness.
+
+    Usage (old style, still supported):
         @step
         async def my_step(self, ai):
             await ai.action("do something")
 
-    Methods WITHOUT @step that have 'ai' as second param still work
-    (backward compatible with existing test cases).
+    Preferred new style (no decorator, no ai param):
+        async def my_step(self):
+            await self.ai.action("do something")
     """
     func._is_step = True
     return func
@@ -84,10 +86,12 @@ def step_mode(mode: ActionMode):
         async def my_step(self, ai):
             await ai.action("do something")
     """
+
     def decorator(func):
         func._step_mode = mode
         func._is_step = True
         return func
+
     return decorator
 
 
@@ -103,11 +107,13 @@ def on_failure(policy: FailurePolicy, max_retries: int = 1):
         async def optional_step(self, ai):
             await ai.action("do something optional")
     """
+
     def decorator(func):
         func._failure_policy = policy
         func._max_retries = max_retries
         func._is_step = True
         return func
+
     return decorator
 
 
@@ -117,17 +123,19 @@ class BaseCase:
     Subclass this and define:
     - setup(): launch browser, navigate to starting URL
     - teardown(): close browser
-    - step methods (any async method that takes `ai` as first param)
+    - step methods: any async method with no required params (uses self.ai)
 
     Optional hooks to override:
     - before_step(step_name): called before each step
     - after_step(step_name, result): called after each step (success or failure)
     - on_step_error(step_name, error): called when a step raises an exception
 
-    Failure policies (via @on_failure decorator):
-    - ABORT: stop execution (default)
-    - SKIP: skip failed step and continue
-    - RETRY: retry up to max_retries times before aborting
+    Step methods are auto-detected: all public callable methods except
+    lifecycle, hooks, and browser methods are treated as steps.
+    No decorator required.
+
+    Use self.ai.action("...") inside steps — no need to declare ``ai`` as a param.
+    The old style ``async def step(self, ai)`` is still supported.
 
     Example:
         class MyCase(BaseCase):
@@ -137,16 +145,16 @@ class BaseCase:
             async def teardown(self):
                 await self.close_browser()
 
-            async def open_page(self, ai):
-                await ai.action("打开首页")
+            async def open_page(self):
+                await self.ai.action("打开首页")
 
             @step_mode("explore")
-            async def search(self, ai):
-                await ai.action("搜索关键词")
+            async def search(self):
+                await self.ai.action("搜索关键词")
 
             @on_failure(FailurePolicy.SKIP)
-            async def optional_check(self, ai):
-                await ai.action("可选的检查")
+            async def optional_check(self):
+                await self.ai.action("可选的检查")
 
             async def before_step(self, step_name: str):
                 print(f"About to run: {step_name}")
@@ -154,6 +162,21 @@ class BaseCase:
             async def after_step(self, step_name: str, result: dict):
                 print(f"Finished: {step_name} -> {result.get('summary')}")
     """
+
+    # Methods excluded from auto-detection as steps
+    _RESERVED_METHODS = frozenset({
+        # Lifecycle
+        "setup", "teardown",
+        # Browser
+        "launch_browser", "close_browser",
+        "launch_browser_persistent", "disconnect_browser",
+        "reconnect_browser", "terminate_browser",
+        "has_browser_session",
+        # Hooks
+        "before_step", "after_step", "on_step_error",
+        # Runner
+        "get_step_methods", "run", "run_step",
+    })
 
     def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None):
         self._case_dir = case_dir or Path(inspect.getfile(self.__class__)).parent
@@ -164,6 +187,10 @@ class BaseCase:
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
+        self._ai: AIContext | None = None
+
+        # Per-case headless override: None = use env var, True/False = explicit
+        self.headless: bool | None = None
 
         # Global context — state machine + store + browser session info
         self._ctx = CaseContext(
@@ -191,6 +218,16 @@ class BaseCase:
         return self._ctx
 
     @property
+    def ai(self) -> AIContext:
+        """AI action context — available inside step methods.
+
+        Use self.ai.action("...") to describe operations in natural language.
+        """
+        if self._ai is None:
+            raise RuntimeError("self.ai is only available inside a step method")
+        return self._ai
+
+    @property
     def _cdp_port(self):
         """CDP port of the persistent browser (None when not in persistent mode)."""
         return self._ctx.browser.cdp_port
@@ -198,9 +235,16 @@ class BaseCase:
     # ---- Browser lifecycle ----
 
     async def launch_browser(self):
-        """Launch browser and create page."""
+        """Launch browser and create page.
+
+        Uses self.headless if set (True/False), otherwise reads env vars.
+        Set self.headless = True in __init__ or as a class attribute to
+        control per-case:
+            class MyCase(BaseCase):
+                headless = True  # this case always runs headless
+        """
         self._pw = await async_playwright().start()
-        self._browser = await self._pw.chromium.launch(**get_launch_args())
+        self._browser = await self._pw.chromium.launch(**get_launch_args(self.headless))
         self._context = await self._browser.new_context()
         self._page = await self._context.new_page()
         # Update context
@@ -227,7 +271,7 @@ class BaseCase:
         """
         self._pw = await async_playwright().start()
         cdp_port, browser, context, page = (
-            await launch_browser_server(self._pw, self._case_dir)
+            await launch_browser_server(self._pw, self._case_dir, self.headless)
         )
         self._browser = browser
         self._context = context
@@ -366,29 +410,26 @@ class BaseCase:
     # ---- Step discovery ----
 
     def get_step_methods(self) -> list[str]:
-        """Get list of step method names."""
+        """Auto-detect all public methods as step methods.
+
+        Every public callable that is NOT a reserved method (setup, teardown,
+        hooks, browser lifecycle, etc.) and NOT a property is treated as a step.
+        No @step decorator required.
+        """
         steps = []
         for name in dir(self):
             if name.startswith("_"):
                 continue
+            if name in self._RESERVED_METHODS:
+                continue
             attr = getattr(self.__class__, name, None)
+            if attr is None:
+                continue
             if not callable(attr):
                 continue
-            if name in ("close_browser", "get_step_methods", "launch_browser", "run", "run_step",
-                        "setup", "teardown", "before_step", "after_step", "on_step_error"):
+            if isinstance(attr, property):
                 continue
-            # Check for explicit @step or @step_mode decorator first
-            if getattr(attr, "_is_step", False):
-                steps.append(name)
-                continue
-            # Fall back to parameter name convention (backward compatible)
-            try:
-                sig = inspect.signature(attr)
-                params = list(sig.parameters.keys())
-                if len(params) >= 2 and params[1] == "ai":
-                    steps.append(name)
-            except (ValueError, TypeError):
-                logger.debug(f"[BaseCase] Cannot inspect signature for method: {name}")
+            steps.append(name)
         return steps
 
     # ---- Step execution ----
@@ -407,9 +448,20 @@ class BaseCase:
         )
 
     async def run_step(self, step_name: str, on_log=None) -> dict:
-        """Run a single step method with hooks."""
+        """Run a single step method with hooks.
+
+        Supports both calling conventions:
+            async def step(self):        # new style — use self.ai
+            async def step(self, ai):    # old style — ai parameter (backward compat)
+        """
         method = getattr(self, step_name)
         ai = self._make_ai(step_name, on_log)
+        self._ai = ai  # expose via self.ai property
+
+        # Detect calling convention: does the method expect an 'ai' parameter?
+        sig = inspect.signature(method)
+        params = list(sig.parameters.keys())
+        takes_ai_param = len(params) >= 2 and params[1] == "ai"
 
         self._ctx.current_step = step_name
         logger.info(f"[Step] {step_name} (replay={ai.has_replay()})")
@@ -427,7 +479,10 @@ class BaseCase:
             logger.error(f"[Hook] before_step({step_name}) raised: {e}")
 
         try:
-            result = await method(ai)
+            if takes_ai_param:
+                result = await method(ai)
+            else:
+                result = await method()
             if result is None:
                 result = ai._last_result or {"success": True, "summary": "完成"}
             status = "success" if result.get("success") else "failed"
@@ -504,6 +559,7 @@ class BaseCase:
 
             return result
         finally:
+            self._ai = None
             self._ctx.current_step = None
 
     # ---- Main run loop ----

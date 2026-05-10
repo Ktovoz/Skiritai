@@ -2,18 +2,12 @@
 
 This case demonstrates the simplest usage of Skiritai:
 a case that runs Playwright steps directly without any LLM calls.
-Each step does NOT call ai.action(), so no LLM is needed.
+Each step uses self.page (Playwright Page API) instead of self.ai.action().
 
 Run:
     skiritai run examples/minimal
-
-Or programmatically:
-    import asyncio
-    from pathlib import Path
-    from skiritai import run_case
-    asyncio.run(run_case(Path("examples/minimal")))
 """
-from skiritai.core.base_case import BaseCase, step
+from skiritai.core.base_case import BaseCase
 
 
 class MinimalCase(BaseCase):
@@ -24,8 +18,7 @@ class MinimalCase(BaseCase):
     async def teardown(self):
         await self.close_browser()
 
-    @step
-    async def s1_navigate(self, ai):
+    async def s1_navigate(self):
         """Navigate to example.com and verify the title."""
         await self.page.goto("https://example.com")
         await self.page.wait_for_load_state("networkidle")
@@ -33,15 +26,13 @@ class MinimalCase(BaseCase):
         assert "Example" in title, f"Unexpected title: {title}"
         return {"success": True, "summary": f"已导航到 {self.page.url}"}
 
-    @step
-    async def s2_check_heading(self, ai):
+    async def s2_check_heading(self):
         """Verify the h1 heading text."""
         heading = await self.page.locator("h1").text_content()
         assert heading and "Example" in heading, f"Unexpected heading: {heading}"
         return {"success": True, "summary": f"标题: {heading}"}
 
-    @step
-    async def s3_follow_link(self, ai):
+    async def s3_follow_link(self):
         """Click the link and verify navigation."""
         await self.page.locator("a").click()
         await self.page.wait_for_load_state("networkidle")

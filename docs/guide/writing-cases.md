@@ -70,4 +70,5 @@ class MyTest(BaseCase):
 
 ## Case-Level Configuration
 
-Class attributes such as `case_dir`、`execution_id`、`results_dir` are passed via the constructor. Additional configuration comes from environment variables (see [Configuration](/guide/configuration)).
+Class attributes such as `case_dir`、`execution_id`、`results_dir` are passed via the constructor. Additional
+configuration comes from environment variables (see [Configuration](/guide/configuration)).

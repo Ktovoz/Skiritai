@@ -89,6 +89,7 @@ def register_tool(func=None, **kwargs):
         async def my_tool(param: str) -> str:
             ...
     """
+
     def decorator(fn):
         lc_tool_obj = lc_tool(fn, **kwargs)
         return _registry.register(lc_tool_obj)

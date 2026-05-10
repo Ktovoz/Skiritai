@@ -81,13 +81,13 @@ def _cmd_run(args):
     report = asyncio.run(run_case(case_dir))
 
     # Print report
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Case: {report.get('case_name')}")
     print(f"Status: {report.get('status')}")
     print(f"Steps: {report.get('success_count', 0)}/{report.get('total_steps', 0)} passed")
     if report.get("elapsed_seconds"):
         print(f"Elapsed: {report['elapsed_seconds']}s")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     for step in report.get("steps", []):
         icon = "✓" if step["status"] == "success" else "✗"

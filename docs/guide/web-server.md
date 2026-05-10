@@ -20,30 +20,30 @@ The server starts at `http://localhost:8000` by default.
 
 ### Case Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/cases/` | List all test cases |
-| `GET` | `/api/cases/{id}` | Get case details with steps |
-| `POST` | `/api/cases/{id}/run` | Run a test case |
-| `POST` | `/api/cases/{id}/stop` | Stop a running case |
-| `GET` | `/api/health` | Health check |
+| Method | Endpoint               | Description                 |
+|--------|------------------------|-----------------------------|
+| `GET`  | `/api/cases/`          | List all test cases         |
+| `GET`  | `/api/cases/{id}`      | Get case details with steps |
+| `POST` | `/api/cases/{id}/run`  | Run a test case             |
+| `POST` | `/api/cases/{id}/stop` | Stop a running case         |
+| `GET`  | `/api/health`          | Health check                |
 
 ### Script Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/cases/{id}/scripts` | List all generated replay scripts |
-| `GET` | `/api/cases/{id}/scripts/{step}` | Get script content |
-| `PUT` | `/api/cases/{id}/scripts/{step}` | Update script content |
+| Method | Endpoint                                  | Description                       |
+|--------|-------------------------------------------|-----------------------------------|
+| `GET`  | `/api/cases/{id}/scripts`                 | List all generated replay scripts |
+| `GET`  | `/api/cases/{id}/scripts/{step}`          | Get script content                |
+| `PUT`  | `/api/cases/{id}/scripts/{step}`          | Update script content             |
 | `POST` | `/api/cases/{id}/scripts/{step}/solidify` | Solidify a script for replay mode |
 
 ### Result Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/cases/{id}/results` | List all historical execution results |
-| `GET` | `/api/cases/{id}/results/{timestamp}` | Get a specific run's report + screenshot list |
-| `GET` | `/api/cases/{id}/results/{timestamp}/screenshots/{file}` | Serve screenshot PNG |
+| Method | Endpoint                                                 | Description                                   |
+|--------|----------------------------------------------------------|-----------------------------------------------|
+| `GET`  | `/api/cases/{id}/results`                                | List all historical execution results         |
+| `GET`  | `/api/cases/{id}/results/{timestamp}`                    | Get a specific run's report + screenshot list |
+| `GET`  | `/api/cases/{id}/results/{timestamp}/screenshots/{file}` | Serve screenshot PNG                          |
 
 ## WebSocket
 
@@ -60,11 +60,11 @@ ws.onmessage = (event) => {
 
 ### WebSocket Message Types
 
-| Type | Description |
-|------|-------------|
-| `node_status` | Step started (`running`), completed (`success`), or failed (`failed`) |
-| `log` | Tool call or log message from the execution engine |
-| `execution_status` | Execution started (`running`) or completed with full report |
+| Type               | Description                                                           |
+|--------------------|-----------------------------------------------------------------------|
+| `node_status`      | Step started (`running`), completed (`success`), or failed (`failed`) |
+| `log`              | Tool call or log message from the execution engine                    |
+| `execution_status` | Execution started (`running`) or completed with full report           |
 
 ### Sending Commands
 

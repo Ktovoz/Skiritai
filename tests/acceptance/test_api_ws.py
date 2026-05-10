@@ -112,7 +112,6 @@ class TestAPILifecycle:
         marker.unlink(missing_ok=True)
 
     def test_run_cancels_previous_execution(self):
-        from skiritai.core.execution_manager import _executions
 
         call_count = 0
 
@@ -172,10 +171,13 @@ class TestWSManagerIntegration:
         events = [
             Event(type="execution_started", execution_id="e1", data={}),
             Event(type="step_started", execution_id="e1", data={"step_id": "open"}),
-            Event(type="tool_called", execution_id="e1", data={"tool_name": "navigate", "tool_args": {"url": "http://x.com"}}),
-            Event(type="step_completed", execution_id="e1", data={"step_id": "open", "mode": "explore", "summary": "ok"}),
+            Event(type="tool_called", execution_id="e1",
+                  data={"tool_name": "navigate", "tool_args": {"url": "http://x.com"}}),
+            Event(type="step_completed", execution_id="e1",
+                  data={"step_id": "open", "mode": "explore", "summary": "ok"}),
             Event(type="step_started", execution_id="e1", data={"step_id": "click"}),
-            Event(type="step_completed", execution_id="e1", data={"step_id": "click", "mode": "replay", "summary": "done"}),
+            Event(type="step_completed", execution_id="e1",
+                  data={"step_id": "click", "mode": "replay", "summary": "done"}),
             Event(type="execution_completed", execution_id="e1", data={"report": {"status": "completed"}}),
         ]
 
@@ -386,6 +388,7 @@ class TestEdgeCases:
 
 if __name__ == "__main__":
     import subprocess
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
         cwd=Path(__file__).resolve().parent.parent.parent,

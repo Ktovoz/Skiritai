@@ -28,6 +28,7 @@ from typing import Any
 
 from skiritai.logger import logger
 
+
 # ---------------------------------------------------------------------------
 # State machine
 # ---------------------------------------------------------------------------
@@ -45,13 +46,13 @@ class CasePhase(str, Enum):
 
 # Valid transitions: current_phase → set of allowed next phases
 _TRANSITIONS: dict[CasePhase, set[CasePhase]] = {
-    CasePhase.IDLE:     {CasePhase.SETUP, CasePhase.PAUSED},
-    CasePhase.SETUP:    {CasePhase.RUNNING, CasePhase.FAILED, CasePhase.PAUSED},
-    CasePhase.RUNNING:  {CasePhase.TEARDOWN, CasePhase.FAILED, CasePhase.PAUSED},
+    CasePhase.IDLE: {CasePhase.SETUP, CasePhase.PAUSED},
+    CasePhase.SETUP: {CasePhase.RUNNING, CasePhase.FAILED, CasePhase.PAUSED},
+    CasePhase.RUNNING: {CasePhase.TEARDOWN, CasePhase.FAILED, CasePhase.PAUSED},
     CasePhase.TEARDOWN: {CasePhase.DONE, CasePhase.FAILED},
-    CasePhase.PAUSED:   {CasePhase.RUNNING, CasePhase.TEARDOWN, CasePhase.FAILED},
-    CasePhase.DONE:     set(),
-    CasePhase.FAILED:   set(),
+    CasePhase.PAUSED: {CasePhase.RUNNING, CasePhase.TEARDOWN, CasePhase.FAILED},
+    CasePhase.DONE: set(),
+    CasePhase.FAILED: set(),
 }
 
 
@@ -106,7 +107,7 @@ class BrowserSessionInfo:
     """Tracks browser connection details for the current case."""
 
     def __init__(self) -> None:
-        self.mode: str = ""          # "standard" or "persistent"
+        self.mode: str = ""  # "standard" or "persistent"
         self.cdp_port: int | None = None
         self.pid: int | None = None
         self.started_at: float | None = None
@@ -141,10 +142,10 @@ class CaseContext:
     """
 
     def __init__(
-        self,
-        case_dir: Path,
-        execution_id: str = "default",
-        perception_mode: str = "playwright",  # "playwright" or "browser_use"
+            self,
+            case_dir: Path,
+            execution_id: str = "default",
+            perception_mode: str = "playwright",  # "playwright" or "browser_use"
     ) -> None:
         self.case_dir = case_dir
         self.execution_id = execution_id

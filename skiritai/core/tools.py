@@ -1,13 +1,12 @@
 """Playwright tools for LangGraph agent — text only, no vision."""
 from __future__ import annotations
 
+import contextvars
 import tempfile
 from pathlib import Path
 from typing import Any
 
 from skiritai.core.tool_registry import register_tool
-
-import contextvars
 
 _page_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_page_ctx", default=None)
 
@@ -184,6 +183,77 @@ async def hover(selector: str) -> str:
     page = get_page()
     await page.locator(selector).hover()
     return f"已悬停在 {selector}"
+
+
+@register_tool
+async def analyze_page() -> str:
+    """分析当前页面的 DOM 结构，返回所有可交互元素的详细信息。
+
+    当 AI 无法找到目标元素时，必须使用此工具获取页面的真实 DOM 结构，
+    而不是依赖训练数据中已知的选择器（选择器可能在页面更新后已失效）。
+
+    返回值是 JSON 格式，包含：
+    - inputs: 所有可见输入框（tag, type, name, id, placeholder, selector）
+    - buttons: 所有可见按钮（text, id, selector）
+    - links: 可见链接（text, href），最多 20 条
+    """
+    page = get_page()
+    return await page.evaluate("""
+        (() => {
+            const isVisible = (el) => {
+                const style = window.getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                return style.display !== 'none' &&
+                       style.visibility !== 'hidden' &&
+                       style.opacity !== '0' &&
+                       rect.width > 0 && rect.height > 0;
+            };
+            const mkSelector = (el) => {
+                if (el.id) return '#' + CSS.escape(el.id);
+                if (el.name) return '[name="' + el.name + '"]';
+                if (el.className && typeof el.className === 'string') {
+                    const cls = el.className.trim().split(/\\s+/)[0];
+                    if (cls) return el.tagName.toLowerCase() + '.' + CSS.escape(cls);
+                }
+                return el.tagName.toLowerCase();
+            };
+            const inputs = [...document.querySelectorAll('input, textarea, select')]
+                .filter(isVisible)
+                .slice(0, 30)
+                .map(el => ({
+                    tag: el.tagName.toLowerCase(),
+                    type: el.type || '',
+                    name: el.name || '',
+                    id: el.id || '',
+                    placeholder: (el.placeholder || '').substring(0, 60),
+                    selector: mkSelector(el)
+                }));
+            const buttons = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')]
+                .filter(isVisible)
+                .slice(0, 20)
+                .map(el => ({
+                    tag: el.tagName.toLowerCase(),
+                    text: (el.textContent || el.value || '').trim().substring(0, 60),
+                    id: el.id || '',
+                    selector: mkSelector(el)
+                }));
+            const links = [...document.querySelectorAll('a[href]')]
+                .filter(isVisible)
+                .slice(0, 20)
+                .map(el => ({
+                    text: (el.textContent || '').trim().substring(0, 60),
+                    href: el.href
+                }));
+            return JSON.stringify({
+                url: location.href,
+                title: document.title,
+                inputs,
+                buttons,
+                links,
+                counts: {inputs: inputs.length, buttons: buttons.length, links: links.length}
+            }, null, 2);
+        })()
+    """)
 
 
 @register_tool

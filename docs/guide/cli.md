@@ -10,6 +10,7 @@ skiritai run . --case my_test.py
 ```
 
 Options:
+
 - `--case` — Run a specific case file
 - `cases_root` — Directory containing test cases
 
@@ -37,4 +38,5 @@ skiritai browser status <case_dir>
 skiritai browser cleanup <case_dir>
 ```
 
-The persistent browser mode keeps Chromium alive as a separate process (via CDP), so it survives Python restarts. Session info is stored in `.browser_session`.
+The persistent browser mode keeps Chromium alive as a separate process (via CDP), so it survives Python restarts.
+Session info is stored in `.browser_session`.

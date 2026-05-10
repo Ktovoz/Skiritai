@@ -16,7 +16,7 @@ from playwright.async_api import async_playwright
 
 from skiritai.core.ai_context import AIContext
 from skiritai.core.base_case import BaseCase
-from skiritai.core.browser import connect_to_browser, get_launch_args, is_browser_alive
+from skiritai.core.browser import is_browser_alive
 
 
 class TestBrowserSessionPersistence:
@@ -229,6 +229,7 @@ class TestBrowserSessionPersistence:
 
 if __name__ == "__main__":
     import subprocess
+
     result = subprocess.run(
         [sys.executable, "-m", "pytest", __file__, "-v", "--tb=short", "--no-header"],
         cwd=Path(__file__).resolve().parent.parent.parent,

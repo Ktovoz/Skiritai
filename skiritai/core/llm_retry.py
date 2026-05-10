@@ -58,11 +58,11 @@ def _calculate_delay(attempt: int, base_delay: float, max_delay: float) -> float
 
 
 async def retry_async(
-    coro_factory: Any,
-    max_retries: int = DEFAULT_MAX_RETRIES,
-    base_delay: float = DEFAULT_BASE_DELAY,
-    max_delay: float = DEFAULT_MAX_DELAY,
-    operation_name: str = "LLM call",
+        coro_factory: Any,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        base_delay: float = DEFAULT_BASE_DELAY,
+        max_delay: float = DEFAULT_MAX_DELAY,
+        operation_name: str = "LLM call",
 ) -> Any:
     """Execute an async callable with retry logic.
 

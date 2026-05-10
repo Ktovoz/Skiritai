@@ -1,0 +1,44 @@
+{
+  "execution_id": "step_modes",
+  "phase": "failed",
+  "perception_mode": "playwright_fallback",
+  "browser": {
+    "mode": "",
+    "cdp_port": null,
+    "pid": null,
+    "started_at": 1778408861.1806421,
+    "ws_endpoint": null
+  },
+  "store": {},
+  "current_step": null,
+  "completed_steps": [
+    "auto_mode",
+    "explore_mode"
+  ],
+  "failed_step": "replay_mode",
+  "started_at": 1778408860.661161,
+  "finished_at": 1778408982.7315142,
+  "elapsed_seconds": 122.07,
+  "phase_history": [
+    [
+      "idle",
+      1778408860.660691
+    ],
+    [
+      "setup",
+      1778408860.661136
+    ],
+    [
+      "running",
+      1778408861.180845
+    ],
+    [
+      "teardown",
+      1778408982.669823
+    ],
+    [
+      "failed",
+      1778408982.7314801
+    ]
+  ]
+}

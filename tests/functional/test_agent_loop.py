@@ -444,13 +444,14 @@ class TestAgentLoopConstants:
 
         assert "page_perceive" in PERCEPTION_TOOLS
         assert "find_element" in PERCEPTION_TOOLS
+        assert "analyze_page" in PERCEPTION_TOOLS
 
     def test_system_prompt_is_chinese(self):
         from skiritai.core.agent_loop import SYSTEM_PROMPT
 
         assert "浏览器自动化测试 Agent" in SYSTEM_PROMPT
-        assert "page_perceive" in SYSTEM_PROMPT
-        assert "find_element" in SYSTEM_PROMPT
+        assert "analyze_page" in SYSTEM_PROMPT
+        assert "get_page_info" in SYSTEM_PROMPT
 
 
 # ============================================================
