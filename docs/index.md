@@ -12,10 +12,6 @@ hero:
     - theme: alt
       text: View on GitHub
       link: https://github.com/Ktovoz/Skiritai
-  image:
-    src: /logo.svg
-    alt: Skiritai
-
 features:
   - icon: 🧠
     title: AI-Powered Exploration
