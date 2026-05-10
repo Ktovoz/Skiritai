@@ -36,6 +36,14 @@ def _find_case_dir(case_id: str) -> Path | None:
     return None
 
 
+def _get_case_dir_or_404(case_id: str) -> Path:
+    """Find a case directory or raise 404."""
+    case_dir = _find_case_dir(case_id)
+    if not case_dir:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return case_dir
+
+
 # --- Case APIs ---
 
 @router.get("")
@@ -173,7 +181,7 @@ async def api_stop_case(case_id: str):
 @router.get("/{case_id}/scripts")
 async def api_list_scripts(case_id: str):
     """List all scripts for a case."""
-    scripts_dir = _find_case_dir(case_id) / "scripts"
+    scripts_dir = _get_case_dir_or_404(case_id) / "scripts"
     if not scripts_dir.exists():
         return []
 
@@ -191,7 +199,7 @@ async def api_list_scripts(case_id: str):
 @router.get("/{case_id}/scripts/{step_id}")
 async def api_get_script(case_id: str, step_id: str):
     """Get script content for a specific step."""
-    script_path = _find_case_dir(case_id) / "scripts" / f"{step_id}.py"
+    script_path = _get_case_dir_or_404(case_id) / "scripts" / f"{step_id}.py"
     if not script_path.exists():
         raise HTTPException(status_code=404, detail="Script not found")
 
@@ -208,7 +216,7 @@ class ScriptUpdate(BaseModel):
 @router.put("/{case_id}/scripts/{step_id}")
 async def api_update_script(case_id: str, step_id: str, body: ScriptUpdate):
     """Update script content."""
-    script_path = _find_case_dir(case_id) / "scripts" / f"{step_id}.py"
+    script_path = _get_case_dir_or_404(case_id) / "scripts" / f"{step_id}.py"
     if not script_path.exists():
         raise HTTPException(status_code=404, detail="Script not found")
 
@@ -222,7 +230,7 @@ async def api_solidify_script(case_id: str, step_id: str):
 
     This confirms the script exists and is ready for replay.
     """
-    scripts_dir = _find_case_dir(case_id) / "scripts"
+    scripts_dir = _get_case_dir_or_404(case_id) / "scripts"
     script_path = scripts_dir / f"{step_id}.py"
 
     # Create scripts dir if it doesn't exist
@@ -250,7 +258,8 @@ async def api_solidify_script(case_id: str, step_id: str):
 @router.get("/{case_id}/results")
 async def api_list_results(case_id: str):
     """List all execution results for a case."""
-    results_dir = _find_case_dir(case_id) / "test_results"
+    case_dir = _get_case_dir_or_404(case_id)
+    results_dir = case_dir / "test_results"
     if not results_dir.exists():
         return []
 
@@ -267,7 +276,7 @@ async def api_list_results(case_id: str):
 @router.get("/{case_id}/results/{timestamp}")
 async def api_get_result(case_id: str, timestamp: str):
     """Get a specific execution result."""
-    results_dir = _find_case_dir(case_id) / "test_results" / timestamp
+    results_dir = _get_case_dir_or_404(case_id) / "test_results" / timestamp
     if not results_dir.exists():
         raise HTTPException(status_code=404, detail="Result not found")
 
@@ -292,7 +301,7 @@ async def api_get_screenshot(case_id: str, timestamp: str, filename: str):
     """Serve a screenshot file."""
     if ".." in filename or "/" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
-    screenshot_path = _find_case_dir(case_id) / "test_results" / timestamp / "screenshots" / filename
+    screenshot_path = _get_case_dir_or_404(case_id) / "test_results" / timestamp / "screenshots" / filename
     if not screenshot_path.exists():
         raise HTTPException(status_code=404, detail="Screenshot not found")
     return FileResponse(screenshot_path, media_type="image/png")

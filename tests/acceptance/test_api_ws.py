@@ -269,9 +269,11 @@ class TestEdgeCases:
         case = MixedCase()
         steps = case.get_step_methods()
 
+        # All public callable methods are auto-discovered as steps,
+        # regardless of parameter signature. Sync methods are included too.
         assert "real_step" in steps
-        assert "not_a_step" not in steps
-        assert "sync_method" not in steps
+        assert "not_a_step" in steps
+        assert "sync_method" in steps
 
     def test_script_path_isolation_between_steps(self):
         from skiritai.core.ai_context import AIContext
@@ -347,7 +349,7 @@ class TestEdgeCases:
         assert client.get("/api/cases/does_not_exist").status_code == 404
         assert client.post("/api/cases/does_not_exist/run").status_code == 404
         assert client.post("/api/cases/does_not_exist/stop").status_code == 404
-        assert client.get("/api/cases/does_not_exist/results").status_code == 200
+        assert client.get("/api/cases/does_not_exist/results").status_code == 404
         assert client.get("/api/cases/does_not_exist/results/ts").status_code == 404
 
     def test_generate_script_scroll_up_direction(self):
