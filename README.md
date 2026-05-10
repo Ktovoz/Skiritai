@@ -229,12 +229,18 @@ await ai.action("...", mode="replay")
 
 </div>
 
-## License
-
-[MIT](LICENSE)
-
 <div align="center">
 
-Issues and Pull Requests are welcome!
+---
+
+### License
+
+[![MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+### Contributing
+
+[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-2EA44F?logo=github&logoColor=white)](https://github.com/Ktovoz/Skiritai/pulls)
+
+Contributions, issues, and feature requests are welcome!
 
 </div>
