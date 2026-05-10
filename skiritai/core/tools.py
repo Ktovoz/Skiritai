@@ -249,12 +249,20 @@ async def analyze_page() -> str:
             const buttons = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')]
                 .filter(isVisible)
                 .slice(0, 20)
-                .map(el => ({
-                    tag: el.tagName.toLowerCase(),
-                    text: (el.textContent || el.value || '').trim().substring(0, 60),
-                    id: el.id || '',
-                    selector: mkSelector(el)
-                }));
+                .map(el => {
+                    const hasSvg = el.querySelector('svg') !== null;
+                    const hasIcon = el.className && /icon|search|menu|close|hamburger/i.test(el.className);
+                    return {
+                        tag: el.tagName.toLowerCase(),
+                        text: (el.textContent || el.value || '').trim().substring(0, 60),
+                        id: el.id || '',
+                        aria_label: (el.getAttribute('aria-label') || '').substring(0, 80),
+                        title: (el.getAttribute('title') || '').substring(0, 80),
+                        classes: (typeof el.className === 'string' ? el.className.trim() : '').substring(0, 100),
+                        has_svg: hasSvg,
+                        selector: mkSelector(el)
+                    };
+                });
             const links = [...document.querySelectorAll('a[href]')]
                 .filter(isVisible)
                 .slice(0, 20)

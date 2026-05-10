@@ -88,11 +88,13 @@ class KtovozBlogCase(BaseCase):
         """Click the search button (top-right), type into the modal, and verify results."""
         await self.ai.action("返回首页")
         await self.ai.analyze_page()
-        # The blog has a search button at top-right that opens a modal
+        # The blog has a search button (magnifying glass icon, no text) at top-right
+        # Use click_text on any search-related text, or click the button element
         await self.ai.action(
-            "点击页面右上角的搜索按钮（一个放大镜图标或空白按钮），"
-            "在弹出的搜索框中输入 'GCC' 并搜索。"
-            "查看搜索结果，确认返回了与 GCC 相关的文章。"
+            "在页面右上角区域找到搜索按钮。注意：搜索按钮是一个图标按钮，"
+            "没有文字，通常显示为放大镜图标。点击它之后会弹出一个搜索框。"
+            "在搜索框中输入 'GCC' 并回车。"
+            "查看搜索结果页面，确认返回了与 GCC 相关的文章。"
         )
         await self.ai.screenshot("search_result")
 
