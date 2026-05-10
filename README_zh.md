@@ -63,15 +63,15 @@ class SearchTest(BaseCase):
     async def teardown(self):
         await self.close_browser()
 
-    async def open_site(self, ai):
-        await ai.action("导航到 https://example.com")
+    async def open_site(self):
+        await self.ai.action("导航到 https://example.com")
 
     @step_mode("explore")  # 强制探索模式
-    async def search(self, ai):
-        await ai.action("搜索 '自动化测试'")
+    async def search(self):
+        await self.ai.action("搜索 '自动化测试'")
 
-    async def verify(self, ai):
-        await ai.action("验证搜索结果已展示")
+    async def verify(self):
+        await self.ai.action("验证搜索结果已展示")
 ```
 
 **首次运行** — AI 探索每个步骤，生成脚本：
@@ -114,7 +114,7 @@ LLM_MODEL=gpt-4o
 
 ```bash
 # 运行示例用例
-skiritai run examples/minimal
+skiritai run examples/tutorial/minimal
 
 # 列出可用用例
 skiritai list examples/
@@ -161,15 +161,57 @@ skiritai/
 └── cli.py                     # CLI 入口
 
 examples/                      # 示例测试用例
-├── minimal/                   # 纯 Playwright，无需 AI
-├── baidu_search/              # AI 驱动 + 回放脚本
-└── playwright_docs/           # 探索示例
+├── tutorial/                  # 教学示例（学习框架特性）
+│   ├── minimal/               #   纯 Playwright，无需 AI
+│   ├── step_modes/            #   auto/explore/replay 三种执行模式
+│   ├── failure_policies/      #   ABORT/SKIP/RETRY 失败策略
+│   ├── hooks_demo/            #   before_step/after_step/on_step_error 钩子
+│   └── context_demo/          #   self.ctx 跨步骤上下文共享
+├── baidu_search/              # [初次尝试] 完整端到端 AI 驱动测试 + 回放脚本
+└── ktovoz_blog/               # [进阶] 11 步长程博客测试
 
 tests/                         # 框架测试
 ├── unit/
 ├── functional/
 ├── acceptance/
 └── e2e/
+```
+
+## 示例
+
+示例分为三个层级：
+
+### 教学（学习框架特性）
+
+| 示例 | 教学内容 |
+|---|---|
+| `minimal/` | BaseCase 基本结构 — 纯 Playwright，无需 LLM |
+| `step_modes/` | `auto` / `explore` / `replay` 三种执行模式 |
+| `failure_policies/` | `@on_failure(SKIP)` / `@on_failure(RETRY)` 错误处理 |
+| `hooks_demo/` | `before_step` / `after_step` / `on_step_error` 生命周期钩子 |
+| `context_demo/` | `self.ctx.store` 跨步骤数据共享 |
+
+### 初次尝试（真实端到端场景）
+
+| 示例 | 说明 |
+|---|---|
+| `baidu_search/` | 完整 E2E：打开百度 → 搜索 → 验证结果。展示真实场景下的探索→回放闭环。 |
+
+### 进阶（长程测试）
+
+| 示例 | 说明 |
+|---|---|
+| `ktovoz_blog/` | 11 步博客测试：首页、文章、标签、关于、页脚、搜索、总结。展示框架处理复杂多步骤场景的能力。 |
+
+```bash
+# 从教学示例开始（无需 AI）
+skiritai run examples/tutorial/minimal
+
+# 尝试真实场景（需要配置 LLM）
+skiritai run examples/baidu_search
+
+# 进阶长程测试
+skiritai run examples/ktovoz_blog
 ```
 
 ## CLI 命令

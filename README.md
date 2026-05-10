@@ -64,15 +64,15 @@ class SearchTest(BaseCase):
     async def teardown(self):
         await self.close_browser()
 
-    async def open_site(self, ai):
-        await ai.action("Navigate to https://example.com")
+    async def open_site(self):
+        await self.ai.action("Navigate to https://example.com")
 
     @step_mode("explore")  # Force AI exploration for this step
-    async def search(self, ai):
-        await ai.action("Search for 'automation testing'")
+    async def search(self):
+        await self.ai.action("Search for 'automation testing'")
 
-    async def verify(self, ai):
-        await ai.action("Verify search results are displayed")
+    async def verify(self):
+        await self.ai.action("Verify search results are displayed")
 ```
 
 **First run** — AI explores each step, generates scripts:
@@ -115,7 +115,7 @@ LLM_MODEL=gpt-4o
 
 ```bash
 # Run an example case
-skiritai run examples/minimal
+skiritai run examples/tutorial/minimal
 
 # List available cases
 skiritai list examples/
@@ -162,15 +162,57 @@ skiritai/
 └── cli.py                     # CLI entry point
 
 examples/                      # Sample test cases
-├── minimal/                   # Pure Playwright, no AI needed
-├── baidu_search/              # AI-driven with replay scripts
-└── playwright_docs/           # Exploration example
+├── tutorial/                  # Teaching examples (learn framework features)
+│   ├── minimal/               #   Pure Playwright, no AI needed
+│   ├── step_modes/            #   auto/explore/replay execution modes
+│   ├── failure_policies/      #   ABORT/SKIP/RETRY failure strategies
+│   ├── hooks_demo/            #   before_step/after_step/on_step_error hooks
+│   └── context_demo/          #   Cross-step context sharing via self.ctx
+├── baidu_search/              # [First Try] Full E2E AI-driven test + replay scripts
+└── ktovoz_blog/               # [Advanced] 11-step long-range blog test
 
 tests/                         # Framework tests
 ├── unit/
 ├── functional/
 ├── acceptance/
 └── e2e/
+```
+
+## Examples
+
+Examples are organized into three tiers:
+
+### Teaching (learn framework features)
+
+| Example | What It Teaches |
+|---|---|
+| `minimal/` | BaseCase structure — pure Playwright, no LLM required |
+| `step_modes/` | `auto` / `explore` / `replay` execution modes via `@step_mode` |
+| `failure_policies/` | `@on_failure(SKIP)` / `@on_failure(RETRY)` error handling |
+| `hooks_demo/` | `before_step` / `after_step` / `on_step_error` lifecycle hooks |
+| `context_demo/` | Cross-step data sharing with `self.ctx.store` |
+
+### First Try (real-world end-to-end)
+
+| Example | Description |
+|---|---|
+| `baidu_search/` | Complete E2E: open Baidu → search → verify results. Demonstrates Explore→Replay loop in a real scenario. |
+
+### Advanced (long-range testing)
+
+| Example | Description |
+|---|---|
+| `ktovoz_blog/` | 11-step blog test: homepage, articles, tags, about, footer, search, summary. Demonstrates the framework's capability for complex multi-step scenarios. |
+
+```bash
+# Start with a teaching example (no AI needed)
+skiritai run examples/tutorial/minimal
+
+# Try a real-world test (needs LLM configured)
+skiritai run examples/baidu_search
+
+# Advanced long-range test
+skiritai run examples/ktovoz_blog
 ```
 
 ## CLI Commands

@@ -68,23 +68,30 @@ async def run_case(
 
 
 def list_cases(cases_root: Path) -> list[dict]:
-    """List all Python-based cases in the cases directory."""
+    """List all Python-based cases in the cases directory.
+
+    Recursively scans subdirectories so cases in tutorial/ etc.
+    are discovered automatically. Case IDs are the leaf directory names.
+    """
     cases = []
     if not cases_root.exists():
         return cases
 
-    for d in sorted(cases_root.iterdir()):
-        if d.is_dir() and (d / "case.py").exists():
-            try:
-                case_class = discover_case_class(d)
-                steps = case_class().get_step_methods()
-                cases.append({
-                    "id": d.name,
-                    "name": case_class.__name__,
-                    "dir": str(d),
-                    "steps": steps,
-                })
-            except Exception as e:
-                logger.warning(f"[PyRunner] Failed to load case {d.name}: {e}")
+    for case_dir in sorted(cases_root.rglob("case.py")):
+        d = case_dir.parent
+        case_id = d.name
+        try:
+            case_class = discover_case_class(d)
+            steps = case_class().get_step_methods()
+            cases.append({
+                "id": case_id,
+                "name": case_class.__name__,
+                "dir": str(d),
+                "steps": steps,
+            })
+        except Exception as e:
+            logger.warning(f"[PyRunner] Failed to load case {case_id}: {e}")
+
+    return cases
 
     return cases
