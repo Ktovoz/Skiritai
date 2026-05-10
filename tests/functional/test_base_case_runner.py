@@ -155,25 +155,23 @@ class TestBrowserConfig:
     """Test browser launch args configuration."""
 
     def test_default_is_not_headless(self):
-        old = os.environ.pop("SKIRITAI_HEADLESS", None)
+        old_sk = os.environ.pop("SKIRITAI_HEADLESS", None)
+        old_h = os.environ.pop("HEADLESS", None)
         try:
-            import skiritai.core.browser
-            importlib.reload(skiritai.core.browser)
             from skiritai.core.browser import get_launch_args
 
             args = get_launch_args()
             assert args["headless"] is False
         finally:
-            if old:
-                os.environ["SKIRITAI_HEADLESS"] = old
-            importlib.reload(skiritai.core.browser)
+            if old_sk:
+                os.environ["SKIRITAI_HEADLESS"] = old_sk
+            if old_h:
+                os.environ["HEADLESS"] = old_h
 
     def test_headless_true_via_env(self):
         old = os.environ.get("SKIRITAI_HEADLESS")
         os.environ["SKIRITAI_HEADLESS"] = "true"
         try:
-            import skiritai.core.browser
-            importlib.reload(skiritai.core.browser)
             from skiritai.core.browser import get_launch_args
 
             args = get_launch_args()
@@ -183,38 +181,31 @@ class TestBrowserConfig:
                 os.environ.pop("SKIRITAI_HEADLESS", None)
             else:
                 os.environ["SKIRITAI_HEADLESS"] = old
-            importlib.reload(skiritai.core.browser)
 
     def test_headless_accepts_1_and_yes(self):
         old = os.environ.get("SKIRITAI_HEADLESS")
         for val in ("1", "yes", "true"):
             os.environ["SKIRITAI_HEADLESS"] = val
-            try:
-                import skiritai.core.browser
-                importlib.reload(skiritai.core.browser)
-                from skiritai.core.browser import get_launch_args
-                assert get_launch_args()["headless"] is True, f"HEADLESS={val}"
-            finally:
-                importlib.reload(skiritai.core.browser)
+            from skiritai.core.browser import get_launch_args
+            assert get_launch_args()["headless"] is True, f"HEADLESS={val}"
         if old is None:
             os.environ.pop("SKIRITAI_HEADLESS", None)
         else:
             os.environ["SKIRITAI_HEADLESS"] = old
-        importlib.reload(skiritai.core.browser)
 
     def test_chrome_path_only_when_set(self):
-        old = os.environ.pop("CHROME_PATH", None)
+        old = os.environ.pop("SKIRITAI_CHROME_PATH", None)
+        old2 = os.environ.pop("CHROME_PATH", None)
         try:
-            import skiritai.core.browser
-            importlib.reload(skiritai.core.browser)
             from skiritai.core.browser import get_launch_args
 
             args = get_launch_args()
             assert "executable_path" not in args
         finally:
             if old:
-                os.environ["CHROME_PATH"] = old
-            importlib.reload(skiritai.core.browser)
+                os.environ["SKIRITAI_CHROME_PATH"] = old
+            if old2:
+                os.environ["CHROME_PATH"] = old2
 
 
 class TestLoggerConfig:
