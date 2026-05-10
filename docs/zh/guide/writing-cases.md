@@ -11,15 +11,12 @@ class MyTestCase(BaseCase):
     @step
     async def step_one(self, ai):
         # ai 是 AIContext 实例——你与浏览器交互的接口
-        await ai.navigate("https://example.com")
-        await ai.click("#my-button")
-        text = await ai.get_text(".result")
-        assert "expected" in text
+        # ai.action() 接收自然语言描述
+        ai.action('点击 #my-button，然后验证结果区域包含 "expected"')
 
     @step
     async def step_two(self, ai):
-        await ai.fill("#input", "hello")
-        await ai.click("#submit")
+        ai.action('在 #input 输入 "hello"，然后点击 #submit')
 
 if __name__ == "__main__":
     run_case(MyTestCase)
@@ -36,36 +33,41 @@ class MyTest(BaseCase):
     @step_mode("explore")  # 始终使用 AI，覆盖已有脚本
     @step
     async def always_explore(self, ai):
-        await ai.navigate("https://example.com")
+        await ai.action("导航到 example.com")
 
     @step_mode("replay")   # 仅使用回放脚本，缺失则报错
     @step
     async def replay_only(self, ai):
-        await ai.click("#button")
+        await ai.action("点击 #button")
 
     @step_mode("auto")     # 默认：有脚本则回放，否则探索
     @step
     async def smart(self, ai):
-        await ai.fill("#input", "text")
+        await ai.action("在 #input 输入 'text'")
 ```
 
 ## 失败处理
 
 ```python
-from skiritai import on_failure
+from skiritai import on_failure, FailurePolicy
 
 class MyTest(BaseCase):
-    @on_failure("SKIP")  # SKIP、ABORT 或 RETRY
+    @on_failure(FailurePolicy.SKIP)  # 跳过失败步骤，继续执行
     @step
     async def optional_step(self, ai):
-        await ai.click("#might-not-exist")
+        await ai.action("点击 #might-not-exist")
+
+    @on_failure(FailurePolicy.RETRY, max_retries=2)  # 最多重试 2 次
+    @step
+    async def flaky_step(self, ai):
+        await ai.action("点击偶尔延迟出现的按钮")
+
+    @on_failure(FailurePolicy.ABORT)  # 立即停止（默认）
+    @step
+    async def critical_step(self, ai):
+        await ai.action("执行关键操作")
 ```
 
 ## 用例级配置
 
-```python
-class MyTest(BaseCase):
-    timeout = 60          # 秒
-    case_dir = __file__   # 脚本/截图存放目录
-    results_dir = "./results"
-```
+`case_dir`、`execution_id`、`results_dir` 通过构造函数传入。更多配置通过环境变量设置（参见[配置](/zh/guide/configuration)）。

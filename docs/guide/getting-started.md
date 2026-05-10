@@ -18,14 +18,11 @@ class MyTest(BaseCase):
 
     @step
     async def search_github(self, ai):
-        await ai.navigate("https://github.com")
-        await ai.fill("input[name='q']", "Skiritai AI testing")
-        await ai.click("button[type='submit']")
+        await ai.action("导航到 GitHub 并搜索 Skiritai AI testing")
 
     @step
     async def verify_results(self, ai):
-        text = await ai.get_text("main")
-        assert "Skiritai" in text
+        await ai.action("验证搜索结果包含 Skiritai")
 
 if __name__ == "__main__":
     run_case(MyTest)

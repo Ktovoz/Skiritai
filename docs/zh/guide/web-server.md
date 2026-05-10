@@ -1,41 +1,75 @@
-# Web 服务器
+# Web Server
 
-Skiritai 内置一个可选的 FastAPI Web 服务器，用于远程测试管理。
+Skiritai includes an optional FastAPI web server for remote test management.
 
-## 安装
+## Install
 
 ```bash
 pip install -e ".[web]"
 ```
 
-## 启动
+## Start
 
 ```bash
 skiritai serve
 ```
 
-默认在 `http://localhost:8000` 启动服务。
+The server starts at `http://localhost:8000` by default.
 
 ## REST API
 
-| 方法 | 端点 | 描述 |
+### Case Endpoints
+
+| Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/cases/` | 列出所有测试用例 |
-| `GET` | `/api/cases/{id}` | 获取用例详情 |
-| `POST` | `/api/cases/{id}/run` | 运行测试用例 |
-| `POST` | `/api/cases/{id}/stop` | 停止正在运行的用例 |
-| `GET` | `/api/cases/{id}/scripts` | 列出已生成的回放脚本 |
-| `GET` | `/api/cases/{id}/results` | 查看测试结果 |
+| `GET` | `/api/cases/` | List all test cases |
+| `GET` | `/api/cases/{id}` | Get case details with steps |
+| `POST` | `/api/cases/{id}/run` | Run a test case |
+| `POST` | `/api/cases/{id}/stop` | Stop a running case |
+| `GET` | `/api/health` | Health check |
+
+### Script Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/cases/{id}/scripts` | List all generated replay scripts |
+| `GET` | `/api/cases/{id}/scripts/{step}` | Get script content |
+| `PUT` | `/api/cases/{id}/scripts/{step}` | Update script content |
+| `POST` | `/api/cases/{id}/scripts/{step}/solidify` | Solidify a script for replay mode |
+
+### Result Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/cases/{id}/results` | List all historical execution results |
+| `GET` | `/api/cases/{id}/results/{timestamp}` | Get a specific run's report + screenshot list |
+| `GET` | `/api/cases/{id}/results/{timestamp}/screenshots/{file}` | Serve screenshot PNG |
 
 ## WebSocket
 
-连接 `ws://localhost:8000/api/ws/cases/{case_id}` 获取实时事件流：
+Connect to `ws://localhost:8000/api/ws/cases/{case_id}` for real-time event streaming:
 
 ```javascript
 const ws = new WebSocket("ws://localhost:8000/api/ws/cases/my_test");
 ws.onmessage = (event) => {
-  console.log(JSON.parse(event.data));
+  const msg = JSON.parse(event.data);
+  // msg.type: "node_status" | "log" | "execution_status"
+  console.log(msg);
 };
 ```
 
-事件类型包括：步骤开始/结束、工具调用、截图和错误。
+### WebSocket Message Types
+
+| Type | Description |
+|------|-------------|
+| `node_status` | Step started (`running`), completed (`success`), or failed (`failed`) |
+| `log` | Tool call or log message from the execution engine |
+| `execution_status` | Execution started (`running`) or completed with full report |
+
+### Sending Commands
+
+The server accepts `{"command": "stop"}` to cancel a running execution:
+
+```javascript
+ws.send(JSON.stringify({ command: "stop" }));
+```

@@ -7,25 +7,31 @@
 
 ## Install Skiritai
 
-### From source (recommended for now)
+### From PyPI (recommended)
 
 ```bash
-git clone https://github.com/Ktovoz/Skiritai.git
-cd Skiritai
-pip install -e .
+pip install skiritai
 ```
 
 ### With optional dependencies
 
 ```bash
 # Web server
-pip install -e ".[web]"
+pip install skiritai[web]
 
 # Anthropic Claude support
-pip install -e ".[anthropic]"
+pip install skiritai[anthropic]
 
 # Everything
-pip install -e ".[web,anthropic]"
+pip install skiritai[web,anthropic]
+```
+
+### From source
+
+```bash
+git clone https://github.com/Ktovoz/Skiritai.git
+cd Skiritai
+pip install -e .
 ```
 
 ## Install Playwright browsers

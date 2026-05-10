@@ -7,25 +7,31 @@
 
 ## 安装 Skiritai
 
-### 从源码安装（当前推荐方式）
+### 从 PyPI 安装（推荐）
 
 ```bash
-git clone https://github.com/Ktovoz/Skiritai.git
-cd Skiritai
-pip install -e .
+pip install skiritai
 ```
 
 ### 安装可选依赖
 
 ```bash
 # Web 服务器
-pip install -e ".[web]"
+pip install skiritai[web]
 
 # Anthropic Claude 支持
-pip install -e ".[anthropic]"
+pip install skiritai[anthropic]
 
 # 全部安装
-pip install -e ".[web,anthropic]"
+pip install skiritai[web,anthropic]
+```
+
+### 从源码安装
+
+```bash
+git clone https://github.com/Ktovoz/Skiritai.git
+cd Skiritai
+pip install -e .
 ```
 
 ## 安装 Playwright 浏览器
@@ -42,7 +48,6 @@ playwright install chromium
 # OpenAI / OpenAI 兼容
 OPENAI_API_KEY=sk-...
 OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o
 
 # 或使用 Anthropic Claude
 ANTHROPIC_API_KEY=sk-ant-...
