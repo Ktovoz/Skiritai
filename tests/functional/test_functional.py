@@ -485,7 +485,7 @@ class TestBrowserConfig:
         old = os.environ.pop("SKIRITAI_HEADLESS", None)
         try:
             import skiritai.core.browser
-            importlib.reload(app.engine.browser)
+            importlib.reload(skiritai.core.browser)
             from skiritai.core.browser import get_launch_args
 
             args = get_launch_args()
@@ -493,7 +493,7 @@ class TestBrowserConfig:
         finally:
             if old:
                 os.environ["SKIRITAI_HEADLESS"] = old
-            importlib.reload(app.engine.browser)
+            importlib.reload(skiritai.core.browser)
 
     def test_headless_true_via_env(self):
         import os
@@ -501,7 +501,7 @@ class TestBrowserConfig:
         os.environ["SKIRITAI_HEADLESS"] = "true"
         try:
             import skiritai.core.browser
-            importlib.reload(app.engine.browser)
+            importlib.reload(skiritai.core.browser)
             from skiritai.core.browser import get_launch_args
 
             args = get_launch_args()
@@ -511,7 +511,7 @@ class TestBrowserConfig:
                 os.environ.pop("SKIRITAI_HEADLESS", None)
             else:
                 os.environ["SKIRITAI_HEADLESS"] = old
-            importlib.reload(app.engine.browser)
+            importlib.reload(skiritai.core.browser)
 
     def test_headless_accepts_1_and_yes(self):
         import os
@@ -520,23 +520,23 @@ class TestBrowserConfig:
             os.environ["SKIRITAI_HEADLESS"] = val
             try:
                 import skiritai.core.browser
-                importlib.reload(app.engine.browser)
+                importlib.reload(skiritai.core.browser)
                 from skiritai.core.browser import get_launch_args
                 assert get_launch_args()["headless"] is True, f"HEADLESS={val}"
             finally:
-                importlib.reload(app.engine.browser)
+                importlib.reload(skiritai.core.browser)
         if old is None:
             os.environ.pop("SKIRITAI_HEADLESS", None)
         else:
             os.environ["SKIRITAI_HEADLESS"] = old
-        importlib.reload(app.engine.browser)
+        importlib.reload(skiritai.core.browser)
 
     def test_chrome_path_only_when_set(self):
         import os
         old = os.environ.pop("CHROME_PATH", None)
         try:
             import skiritai.core.browser
-            importlib.reload(app.engine.browser)
+            importlib.reload(skiritai.core.browser)
             from skiritai.core.browser import get_launch_args
 
             args = get_launch_args()
@@ -544,7 +544,7 @@ class TestBrowserConfig:
         finally:
             if old:
                 os.environ["CHROME_PATH"] = old
-            importlib.reload(app.engine.browser)
+            importlib.reload(skiritai.core.browser)
 
 
 # ============================================================
@@ -558,26 +558,26 @@ class TestLoggerConfig:
         old = os.environ.pop("LOG_LEVEL", None)
         try:
             import skiritai.logger
-            importlib.reload(app.logger)
-            assert app.logger.LOG_LEVEL == "INFO"
+            importlib.reload(skiritai.logger)
+            assert skiritai.logger.LOG_LEVEL == "INFO"
         finally:
             if old:
                 os.environ["LOG_LEVEL"] = old
-            importlib.reload(app.logger)
+            importlib.reload(skiritai.logger)
 
     def test_log_level_from_env(self):
         old = os.environ.get("LOG_LEVEL")
         os.environ["LOG_LEVEL"] = "WARNING"
         try:
             import skiritai.logger
-            importlib.reload(app.logger)
-            assert app.logger.LOG_LEVEL == "WARNING"
+            importlib.reload(skiritai.logger)
+            assert skiritai.logger.LOG_LEVEL == "WARNING"
         finally:
             if old is None:
                 os.environ.pop("LOG_LEVEL", None)
             else:
                 os.environ["LOG_LEVEL"] = old
-            importlib.reload(app.logger)
+            importlib.reload(skiritai.logger)
 
 
 # ============================================================
