@@ -49,6 +49,7 @@ Replay Mode (Execute the proven path)
 | **Multi-level Fallback**  | `fill` → `click_force` → `eval_js` for resilient element interaction                      |
 | **Flexible LLM**          | Supports OpenAI, Anthropic, Qwen, and any compatible API                                  |
 | **Optional Web UI**       | FastAPI backend with REST + WebSocket for external frontends                              |
+| **Visual Reports**        | Standalone HTML report built with Vue 3 + Ant Design — screenshots, assertions, step details |
 | **CLI**                   | `skiritai run/serve/list/browser` commands                                                |
 
 ## How It Works
@@ -160,6 +161,11 @@ skiritai/
 │   ├── routers/               # REST + WebSocket endpoints
 │   └── ws_manager.py          # Event → WebSocket bridge
 └── cli.py                     # CLI entry point
+
+report/                        # Visual report project (Vue 3 + Ant Design)
+├── src/                       #   Components: ReportHeader, SummaryBar, StepCard, ScreenshotViewer
+├── dist/                      #   Build output (single-file HTML, data injected by _render_html)
+└── package.json               #   skiritai-report
 
 examples/                      # Sample test cases
 ├── tutorial/                  # Teaching examples (learn framework features)

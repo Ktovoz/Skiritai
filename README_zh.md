@@ -48,6 +48,7 @@ Skiritai 是一个 AI 驱动的浏览器测试自动化框架，核心理念是 
 | **多重降级策略**      | `fill` → `click_force` → `eval_js`，确保元素交互稳定 |
 | **灵活的 LLM**     | 支持 OpenAI、Anthropic、Qwen 及任意兼容 API          |
 | **可选 Web 界面**   | FastAPI 后端提供 REST + WebSocket 接口，支持外部前端集成   |
+| **可视化报告**     | Vue 3 + Ant Design 构建的独立 HTML 报告，包含截图、断言、步骤详情 |
 | **CLI 工具**      | `skiritai run/serve/list/browser` 命令行操作     |
 
 ## 工作原理
@@ -160,6 +161,11 @@ skiritai/
 │   └── ws_manager.py          # 事件 → WebSocket 桥接
 └── cli.py                     # CLI 入口
 
+report/                        # 可视化报告项目（Vue 3 + Ant Design）
+├── src/                       #   组件：ReportHeader、SummaryBar、StepCard、ScreenshotViewer
+├── dist/                      #   构建产物（单文件 HTML，由 _render_html 注入数据）
+└── package.json               #   skiritai-report
+
 examples/                      # 示例测试用例
 ├── tutorial/                  # 教学示例（学习框架特性）
 │   ├── minimal/               #   纯 Playwright，无需 AI
@@ -213,6 +219,30 @@ skiritai run examples/baidu_search
 # 进阶长程测试
 skiritai run examples/ktovoz_blog
 ```
+
+## 路线图
+
+### 视觉感知层
+
+当前 AI 探索依赖 DOM 分析和 CSS 选择器。下一步将引入**视觉感知**能力 — 智能体将像人类测试员一样"看见"页面：
+
+- **基于视觉的 AI 探索** — 通过截图理解页面，识别 UI 元素的视觉特征，支持 canvas/WebGL 等无 DOM 可访问的界面
+- **多模态模型支持** — 接入视觉语言模型（GPT-4o、Claude 3.5 Sonnet、Gemini）和原生多模态模型，实现更丰富的页面理解
+- **视觉回归检测** — 跨运行截图对比，自动发现非预期的 UI 变化
+
+### 多端与跨端测试
+
+Skiritai 目前仅支持 **Web** 端（Playwright/Chromium），未来将扩展到：
+
+| 平台 | 计划方案 | 状态 |
+|------|---------|------|
+| **移动端（iOS/Android）** | Appium / browser-use mobile 集成 | 规划中 |
+| **API 测试** | AI 智能体可用的 HTTP 请求工具 | 规划中 |
+| **桌面端（Electron、原生应用）** | Playwright Electron / 系统级自动化 | 调研中 |
+
+目标是构建统一的测试框架，相同的「探索 → 回放」工作流在 Web、移动端、API 上通用 — 一次编写，到处测试。
+
+---
 
 ## CLI 命令
 
