@@ -98,11 +98,11 @@ class TestPyCaseRunner:
 
         cases_root = Path(__file__).resolve().parent.parent.parent / "examples"
         cases = list_cases(cases_root)
-        assert len(cases) >= 3  # baidu_search, minimal, playwright_docs
+        assert len(cases) >= 3  # baidu_search, minimal, ktovoz_blog
 
         case_ids = [c["id"] for c in cases]
         assert "baidu_search" in case_ids
-        assert "playwright_docs" in case_ids
+        assert "ktovoz_blog" in case_ids
 
     def test_list_cases_structure(self):
         from skiritai.core.runner import list_cases

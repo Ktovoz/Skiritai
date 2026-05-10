@@ -167,7 +167,7 @@ class TestResultPersistence:
         from skiritai.web.routers.cases import CASES_ROOT
 
         case_dir = CASES_ROOT / "baidu_search"
-        results_dir = case_dir / "results"
+        results_dir = case_dir / "test_results"
 
         test_timestamp = "20260101_120000"
         test_results_dir = results_dir / test_timestamp
