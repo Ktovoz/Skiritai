@@ -176,9 +176,14 @@ class TestResultsPersistence:
 
         assert report["status"] == "failed"
 
-        screenshot_path = results_dir / "screenshots" / "crash_step.png"
-        assert screenshot_path.exists(), f"Screenshot not found at {screenshot_path}"
-        assert screenshot_path.stat().st_size > 0
+        # _save_report puts screenshots under results_dir/<timestamp>/screenshots/
+        ts_dirs = [d for d in results_dir.iterdir() if d.is_dir()]
+        assert len(ts_dirs) >= 1, "No timestamped result directory found"
+        screenshots_dir = ts_dirs[0] / "screenshots"
+        assert screenshots_dir.exists(), f"Screenshots directory not found at {screenshots_dir}"
+        png_files = list(screenshots_dir.glob("*.png"))
+        assert len(png_files) >= 1, f"No PNG screenshots found in {screenshots_dir}"
+        assert png_files[0].stat().st_size > 0
 
         shutil.rmtree(tmpdir, ignore_errors=True)
 

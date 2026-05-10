@@ -463,9 +463,10 @@ class BaseCase:
         self._ai = ai  # expose via self.ai property
 
         # Detect calling convention: does the method expect an 'ai' parameter?
+        # Note: method is a bound method, so 'self' is already stripped from the signature.
         sig = inspect.signature(method)
         params = list(sig.parameters.keys())
-        takes_ai_param = len(params) >= 2 and params[1] == "ai"
+        takes_ai_param = len(params) >= 1 and params[0] == "ai"
 
         self._ctx.current_step = step_name
         logger.info(f"[Step] {step_name} (replay={ai.has_replay()})")
@@ -740,101 +741,37 @@ class BaseCase:
 
     @staticmethod
     def _render_html(report: dict) -> str:
-        """Render the report using the built-in HTML template."""
+        """Render the report using the Vue + Ant Design SPA template."""
         import base64
+        import json
 
-        template_path = Path(__file__).parent / "templates" / "report.html"
-        html = template_path.read_text(encoding="utf-8")
+        # Look for the built Vue template
+        template_paths = [
+            Path(__file__).parent.parent.parent / "report" / "dist" / "index.html",
+            Path(__file__).parent / "templates" / "report.html",
+        ]
+        template_html = None
+        for tp in template_paths:
+            if tp.exists():
+                template_html = tp.read_text(encoding="utf-8")
+                break
 
-        # Build step cards
-        step_cards = []
-        for i, step in enumerate(report.get("steps", []), 1):
-            icon = "✓" if step["status"] == "success" else "✗"
-            status_cls = "pass" if step["status"] == "success" else "fail"
-            elapsed_str = BaseCase._format_duration(step.get("elapsed", 0))
-            summary = step.get("summary", "")[:300]
+        if template_html is None:
+            return f"<html><body><pre>{json.dumps(report, ensure_ascii=False, indent=2)}</pre></body></html>"
 
-            # Build verification items
-            verifications_html = ""
-            for v in step.get("verifications", []):
-                v_cls = "verif-pass" if v["passed"] else "verif-fail"
-                v_icon = "✓" if v["passed"] else "✗"
-                reasons = v.get("reason", "")[:150]
-                verifications_html += (
-                    f'<div class="verification-item {v_cls}">'
-                    f'<span class="verif-icon">{v_icon}</span>'
-                    f'<span>{v["assertion"]}</span>'
-                    f'</div>'
-                    f'<div class="verif-reason">{reasons}</div>'
-                )
-
-            # Build screenshots (base64 embedded)
-            screenshots_html = ""
+        # Convert screenshot paths to base64 data URIs for inline embedding
+        for step in report.get("steps", []):
             for s in step.get("screenshots", []):
                 try:
                     with open(s["path"], "rb") as f:
                         b64 = base64.b64encode(f.read()).decode()
-                    screenshots_html += (
-                        f'<div class="screenshot-thumb">'
-                        f'<img src="data:image/png;base64,{b64}" loading="lazy" />'
-                        f'<div class="screenshot-label">{s["name"]}</div>'
-                        f'</div>'
-                    )
+                    s["path"] = f"data:image/png;base64,{b64}"
                 except Exception:
                     pass
-            if screenshots_html:
-                screenshots_html = f'<div class="screenshots"><div class="screenshots-title">Screenshots</div>{screenshots_html}</div>'
 
-            step_cards.append(
-                f'<div class="step-card">'
-                f'<div class="step-header">'
-                f'<span class="step-num">#{i}</span>'
-                f'<span class="step-name">{step["step_id"]}</span>'
-                f'<span class="step-mode">{step.get("mode", "")}</span>'
-                f'<span class="step-status {status_cls}">{icon} {step["status"].upper()}</span>'
-                f'<span class="step-time">{elapsed_str}</span>'
-                f'</div>'
-                f'<div class="step-body">'
-                f'<div class="step-summary">{summary}</div>'
-                f'{verifications_html}'
-                f'{screenshots_html}'
-                f'</div>'
-                f'</div>'
-            )
-
-        # Count verifications
-        all_verifs = []
-        for s in report.get("steps", []):
-            all_verifs.extend(s.get("verifications", []))
-        verif_passed = sum(1 for v in all_verifs if v["passed"])
-        verif_total = len(all_verifs)
-        verif_summary = f"{verif_passed}/{verif_total}" if verif_total else "—"
-
-        # Build failures section
-        failures = [s for s in report.get("steps", []) if s["status"] == "failed"]
-        failures_section = ""
-        if failures:
-            items = "".join(
-                f'<div class="failure-item"><b>{s["step_id"]}</b>: {s.get("error", s.get("summary", ""))}</div>'
-                for s in failures
-            )
-            failures_section = f'<div class="failures-section"><h2>Failures</h2>{items}</div>'
-
-        passed = report["success_count"]
-        failed = report["failed_count"]
-
-        html = html.replace("{{case_name}}", report["case_name"])
-        html = html.replace("{{status}}", report["status"].upper())
-        html = html.replace("{{status_badge_class}}", "badge-pass" if report["status"] == "completed" else "badge-fail")
-        html = html.replace("{{success_count}}", str(passed))
-        html = html.replace("{{total_steps}}", str(report["total_steps"]))
-        html = html.replace("{{elapsed}}", BaseCase._format_duration(report["elapsed_seconds"]))
-        html = html.replace("{{passed_count}}", str(passed))
-        html = html.replace("{{failed_count}}", str(failed))
-        html = html.replace("{{verification_summary}}", verif_summary)
-        html = html.replace("{{total_elapsed}}", BaseCase._format_duration(report["elapsed_seconds"]))
-        html = html.replace("{{step_cards}}", "\n".join(step_cards))
-        html = html.replace("{{failures_section}}", failures_section)
+        # Inject report data into the JSON placeholder
+        report_json = json.dumps(report, ensure_ascii=False)
+        html = template_html.replace('{"placeholder":true}', report_json)
         return html
 
     def _save_report(self, report: dict) -> None:
