@@ -817,11 +817,16 @@ class BaseCase:
 
     def _save_report(self, report: dict) -> None:
         """Save report.json and report.html to the results directory."""
-        import json, shutil
+        import json, re, shutil
         from datetime import datetime
 
         results_dir = self._results_dir or (self._case_dir / "test_results")
-        ts_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
+        # If results_dir already ends with a timestamp (e.g. from API path),
+        # use it directly; otherwise create a new timestamped subdirectory.
+        if re.match(r"^\d{8}_\d{6}$", results_dir.name):
+            ts_dir = results_dir
+        else:
+            ts_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
         ts_dir.mkdir(parents=True, exist_ok=True)
 
         # Copy screenshots to results dir and update paths

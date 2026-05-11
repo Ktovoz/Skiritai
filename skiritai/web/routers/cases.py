@@ -131,7 +131,12 @@ async def api_run_case(case_id: str):
         results_dir = case_dir / "test_results" / timestamp
         try:
             report = await run_case(case_dir, execution_id=case_id, results_dir=results_dir)
-            logger.info(f"[API] Case {case_id} completed")
+            # Save result to disk (API path — distinct from CLI path which uses BaseCase._save_report)
+            results_dir.mkdir(parents=True, exist_ok=True)
+            (results_dir / "report.json").write_text(
+                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8",
+            )
+            logger.info(f"[API] Case {case_id} completed, results saved to {results_dir}")
         except asyncio.CancelledError:
             logger.info(f"[API] Case {case_id} execution cancelled")
             results_dir.mkdir(parents=True, exist_ok=True)
