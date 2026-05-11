@@ -39,3 +39,30 @@ skiritai run . --case example.py
 
 On the first run, the AI explores and figures out the right selectors. On subsequent runs, the generated replay script
 runs directly at full speed.
+
+## Alternative: Flow API (No Subclass)
+
+Prefer a functional style? Use the [Flow API](/guide/flow-api) — no `BaseCase`, no decorators:
+
+```python
+from skiritai import flow
+
+async with flow() as ai:
+    await ai.action("Navigate to GitHub and search for Skiritai")
+    await ai.verify("Search results include Skiritai")
+```
+
+## Alternative: YAML Cases (No Code)
+
+No Python at all? Define your test in [YAML](/guide/yaml-cases):
+
+```yaml
+# case.yaml
+steps:
+  - action: Navigate to GitHub and search for Skiritai
+  - verify: Search results include Skiritai
+```
+
+```bash
+skiritai run .
+```

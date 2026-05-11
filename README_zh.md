@@ -43,6 +43,8 @@ Skiritai 是一个 AI 驱动的浏览器测试自动化框架，核心理念是 
 |-----------------|---------------------------------------------|
 | **探索 → 回放闭环**   | 首次运行 AI 探索并生成脚本，后续运行直接回放                    |
 | **30 倍性能提升**    | 回放模式跳过 AI 推理 — 74s → 2.5s                   |
+| **Flow API**      | 函数式、无需继承的 API — `async with flow() as ai:`                  |
+| **YAML 用例**     | 用 YAML 定义测试步骤，通过 CLI 或 `run_yaml_case()` 运行          |
 | **Python 原生用例** | 用 Python 类定义测试用例，`@step_mode` 装饰器控制模式       |
 | **自动固化**        | 探索成功后自动生成可回放脚本                              |
 | **多重降级策略**      | `fill` → `click_force` → `eval_js`，确保元素交互稳定 |
@@ -92,6 +94,37 @@ class SearchTest(BaseCase):
 [Step] verify      (replay)   → 0.8s → 直接执行               ✓
 总计: 2.5s
 ```
+
+### Flow API（函数式，无需继承）
+
+```python
+from skiritai import flow
+
+async with flow() as ai:
+    await ai.action("导航到 https://example.com")
+    await ai.screenshot("homepage")
+    await ai.verify("页面标题包含 'Example'")
+```
+
+`flow()` 是一个函数式上下文管理器 — 无需子类、无需装饰器。直接使用 `ai.action()`、`ai.verify()`、`ai.screenshot()`、`ai.analyze_page()` 和 `ai.get_page_info()`。
+
+### YAML 用例（零代码）
+
+```yaml
+# case.yaml
+name: 搜索测试
+steps:
+  - action: 打开 https://www.baidu.com
+  - action: 搜索 "Playwright"
+  - verify: 搜索结果已展示
+  - screenshot: result
+```
+
+```bash
+skiritai run examples/baidu_yaml
+```
+
+YAML 用例非常适合不想编写 Python 代码的 QA 团队。支持 `action`、`verify`、`screenshot`、`analyze`、`page_info` 步骤类型，以及每步级别的 `on_failure: skip | abort` 策略。
 
 ## 快速开始
 
@@ -148,6 +181,8 @@ skiritai/
 │   ├── ai_context.py          # 探索/回放执行上下文
 │   ├── base_case.py           # 测试用例基类
 │   ├── runner.py              # 用例发现与执行
+│   ├── flow.py                # 函数式、无需继承的 API
+│   ├── yaml_runner.py         # YAML 用例加载与运行器
 │   ├── tools.py               # Playwright 工具集（14 个工具）
 │   ├── browser.py             # 浏览器生命周期管理
 │   └── ...
@@ -187,6 +222,13 @@ tests/                         # 框架测试
 
 示例分为三个层级：
 
+### 新式编写方式（无需 BaseCase）
+
+| 示例 | 说明 |
+|---|---|
+| `flow_demo/` | 函数式 Flow API — `async with flow() as ai:` 风格，无需继承 |
+| `baidu_yaml/` | YAML 定义的测试用例 — 完全用 YAML 编写测试 |
+
 ### 教学（学习框架特性）
 
 | 示例 | 教学内容 |
@@ -210,6 +252,12 @@ tests/                         # 框架测试
 | `ktovoz_blog/` | 11 步博客测试：首页、文章、标签、关于、页脚、搜索、总结。展示框架处理复杂多步骤场景的能力。 |
 
 ```bash
+# Flow API — 函数式风格，无需继承
+python examples/flow_demo/demo.py
+
+# YAML 用例 — 零 Python 代码
+skiritai run examples/baidu_yaml
+
 # 从教学示例开始（无需 AI）
 skiritai run examples/tutorial/minimal
 

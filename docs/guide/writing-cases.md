@@ -2,6 +2,11 @@
 
 Test cases are Python classes that inherit from `BaseCase`. Each step is an `async` method decorated with `@step`.
 
+::: tip Other ways to write tests
+- **[Flow API](/guide/flow-api)** — Functional style with `async with flow() as ai:`, no subclass needed.
+- **[YAML Cases](/guide/yaml-cases)** — Define test steps in YAML, no Python code at all.
+:::
+
 ## Basic Structure
 
 ```python
