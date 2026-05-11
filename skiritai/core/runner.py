@@ -68,18 +68,21 @@ async def run_case(
 
 
 def list_cases(cases_root: Path) -> list[dict]:
-    """List all Python-based cases in the cases directory.
+    """List all cases (Python + YAML) in the cases directory.
 
-    Recursively scans subdirectories so cases in tutorial/ etc.
-    are discovered automatically. Case IDs are the leaf directory names.
+    Recursively scans subdirectories. Case IDs are the leaf directory names.
     """
     cases = []
     if not cases_root.exists():
         return cases
 
+    seen_dirs = set()
+
+    # Python cases
     for case_dir in sorted(cases_root.rglob("case.py")):
         d = case_dir.parent
         case_id = d.name
+        seen_dirs.add(str(d))
         try:
             case_class = discover_case_class(d)
             steps = case_class().get_step_methods()
@@ -88,8 +91,20 @@ def list_cases(cases_root: Path) -> list[dict]:
                 "name": case_class.__name__,
                 "dir": str(d),
                 "steps": steps,
+                "source": "python",
             })
         except Exception as e:
             logger.warning(f"[PyRunner] Failed to load case {case_id}: {e}")
+
+    # YAML cases
+    try:
+        from skiritai.core.yaml_runner import list_yaml_cases
+        yaml_cases = list_yaml_cases(cases_root)
+        for yc in yaml_cases:
+            if yc["dir"] not in seen_dirs:
+                cases.append(yc)
+                seen_dirs.add(yc["dir"])
+    except Exception as e:
+        logger.debug(f"[Runner] YAML case listing skipped: {e}")
 
     return cases
