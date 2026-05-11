@@ -26,6 +26,9 @@ Supported step types:
     - ``analyze``:  Pre-analyze page DOM (injects context into next action)
     - ``page_info``: Get page title, URL, text summary
 
+Step-level options (per step dict):
+    - ``on_failure``: ``abort`` (default) | ``skip`` — controls what happens when the step fails
+
 Optional YAML fields:
     - ``name``:       Case display name (default: directory name)
     - ``headless``:   Run browser headless (default: env or false)
@@ -38,7 +41,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from skiritai.core.browser import get_launch_args
+from skiritai.core._session import BrowserSession, OnLogCallback, save_report
+from skiritai.core.ai_context import AIContext
 from skiritai.core.case_context import CaseContext
 from skiritai.events import Event, event_bus
 from skiritai.logger import logger
@@ -91,9 +95,69 @@ def load_yaml_case(case_dir: Path) -> dict:
     return data
 
 
+# ---- Failure policy for YAML steps ----
+
+def _step_failure_policy(step_def: dict) -> str:
+    """Return the failure policy for a YAML step: "abort" or "skip"."""
+    raw = step_def.get("on_failure", "abort")
+    if isinstance(raw, str) and raw.lower() in ("abort", "skip"):
+        return raw.lower()
+    return "abort"
+
+
+# ---- Step execution helpers ----
+
+async def _exec_action(ai: AIContext, arg: str) -> tuple[str, dict]:
+    result = await ai.action(str(arg))
+    ok = result.get("success", False)
+    status = "success" if ok else "failed"
+    entry = {
+        "status": status,
+        "mode": "replay" if ai.has_replay() else "explore",
+        "summary": result.get("summary", ""),
+    }
+    return status, entry
+
+
+async def _exec_verify(ai: AIContext, arg: str) -> tuple[str, dict]:
+    result = await ai.verify(str(arg))
+    passed = result.get("passed", False)
+    status = "passed" if passed else "failed"
+    entry = {
+        "status": status,
+        "assertion": str(arg),
+        "reason": result.get("reason", ""),
+    }
+    return status, entry
+
+
+async def _exec_screenshot(ai: AIContext, arg: str) -> tuple[str, dict]:
+    path = await ai.screenshot(str(arg))
+    return "success", {"status": "success", "screenshot": path}
+
+
+async def _exec_analyze(ai: AIContext, _arg: str) -> tuple[str, dict]:
+    await ai.analyze_page()
+    return "success", {"status": "success"}
+
+
+async def _exec_page_info(ai: AIContext, _arg: str) -> tuple[str, dict]:
+    info = await ai.get_page_info()
+    return "success", {"status": "success", "page_info": info}
+
+
+_STEP_EXECUTORS = {
+    "action": _exec_action,
+    "verify": _exec_verify,
+    "screenshot": _exec_screenshot,
+    "analyze": _exec_analyze,
+    "page_info": _exec_page_info,
+}
+
+
 async def run_yaml_case(
     case_dir: Path,
-    on_log: Any = None,
+    on_log: OnLogCallback = None,
     execution_id: str | None = None,
     results_dir: Path | None = None,
 ) -> dict:
@@ -108,8 +172,6 @@ async def run_yaml_case(
     Returns:
         Report dict with case_name, status, steps, etc.
     """
-    from playwright.async_api import async_playwright
-
     from skiritai.core.agent_loop import register_all_tools
     register_all_tools()
 
@@ -123,14 +185,10 @@ async def run_yaml_case(
     eid = execution_id or case_dir.name
     rd = results_dir or case_dir
 
-    # --- Browser lifecycle ---
-    pw = await async_playwright().start()
-    browser = await pw.chromium.launch(**get_launch_args(headless))
-    context = await browser.new_context()
-    page = await context.new_page()
-
+    # --- Browser lifecycle (shared BrowserSession) ---
+    session = BrowserSession(headless=headless)
+    await session.start()
     ctx = CaseContext(case_dir=case_dir, execution_id=eid)
-    ctx.browser.mode = "standard"
     ctx.browser.started_at = time.time()
 
     logger.info(f"[YamlRunner] {case_name} — {len(steps)} steps")
@@ -143,11 +201,13 @@ async def run_yaml_case(
 
     # Navigate to start URL if specified
     if start_url:
-        await page.goto(start_url)
-        await page.wait_for_load_state("networkidle")
+        await session.page.goto(start_url)
+        await session.page.wait_for_load_state("networkidle")
         logger.info(f"[YamlRunner] Navigated to {start_url}")
 
     # --- Execute steps ---
+    # Reuse a single AIContext across steps so analyze_page data persists.
+    ai: AIContext | None = None
     results: list[dict] = []
     success_count = 0
     aborted = False
@@ -173,13 +233,11 @@ async def run_yaml_case(
             execution_id=eid,
             data={"step_id": step_name, "step_type": step_type},
         ))
-
         logger.info(f"[YamlRunner] {step_name} ({step_type}): {step_arg}")
 
-        # Create a fresh AIContext for each step
-        from skiritai.core.ai_context import AIContext
-        ai = AIContext(
-            page=page,
+        # Advance AIContext for new step, carrying over perception cache
+        new_ai = AIContext(
+            page=session.page,
             case_dir=case_dir,
             step_id=step_name,
             on_log=on_log,
@@ -187,6 +245,10 @@ async def run_yaml_case(
             execution_id=eid,
             max_steps=max_steps,
         )
+        if ai is not None:
+            new_ai._page_analysis = ai._page_analysis
+            new_ai._page_info = ai._page_info
+        ai = new_ai
         ai._step_started_at = time.time()
 
         entry: dict[str, Any] = {
@@ -195,55 +257,16 @@ async def run_yaml_case(
         }
 
         try:
-            if step_type == "action":
-                result = await ai.action(str(step_arg))
-                ai._step_elapsed = time.time() - ai._step_started_at
-                ok = result.get("success", False)
-                entry.update({
-                    "status": "success" if ok else "failed",
-                    "mode": "replay" if ai.has_replay() else "explore",
-                    "summary": result.get("summary", ""),
-                    "elapsed": round(ai._step_elapsed, 2),
-                })
+            executor = _STEP_EXECUTORS.get(step_type)
+            if executor is None:
+                raise ValueError(f"Unknown step type: {step_type}")
 
-            elif step_type == "verify":
-                result = await ai.verify(str(step_arg))
-                ai._step_elapsed = time.time() - ai._step_started_at
-                passed = result.get("passed", False)
-                entry.update({
-                    "status": "passed" if passed else "failed",
-                    "assertion": str(step_arg),
-                    "reason": result.get("reason", ""),
-                    "elapsed": round(ai._step_elapsed, 2),
-                })
+            status, detail = await executor(ai, str(step_arg))
+            ai._step_elapsed = time.time() - ai._step_started_at
+            detail["elapsed"] = round(ai._step_elapsed, 2)
+            entry.update(detail)
 
-            elif step_type == "screenshot":
-                path = await ai.screenshot(str(step_arg))
-                ai._step_elapsed = time.time() - ai._step_started_at
-                entry.update({
-                    "status": "success",
-                    "screenshot": path,
-                    "elapsed": round(ai._step_elapsed, 2),
-                })
-
-            elif step_type == "analyze":
-                result = await ai.analyze_page()
-                ai._step_elapsed = time.time() - ai._step_started_at
-                entry.update({
-                    "status": "success",
-                    "elapsed": round(ai._step_elapsed, 2),
-                })
-
-            elif step_type == "page_info":
-                result = await ai.get_page_info()
-                ai._step_elapsed = time.time() - ai._step_started_at
-                entry.update({
-                    "status": "success",
-                    "page_info": result,
-                    "elapsed": round(ai._step_elapsed, 2),
-                })
-
-            if entry.get("status") in ("success", "passed"):
+            if status in ("success", "passed"):
                 success_count += 1
                 ctx.completed_steps.append(step_name)
             else:
@@ -258,25 +281,28 @@ async def run_yaml_case(
                 "elapsed": round(ai._step_elapsed, 2),
             })
             ctx.failed_step = step_name
+            status = "failed"
 
         results.append(entry)
 
         await event_bus.publish(Event(
-            type="step_completed" if entry["status"] in ("success", "passed") else "step_failed",
+            type="step_completed" if entry.get("status") in ("success", "passed") else "step_failed",
             execution_id=eid,
             data={"step_id": step_name, "step_type": step_type},
         ))
 
-        # Abort on failure (same default as BaseCase)
-        if entry["status"] == "failed":
-            logger.error(f"[YamlRunner] Step {step_name} failed, aborting")
-            aborted = True
-            break
+        # Handle failure based on on_failure policy
+        if entry.get("status") == "failed":
+            policy = _step_failure_policy(step_def)
+            if policy == "skip":
+                logger.warning(f"[YamlRunner] Step {step_name} failed, skipping (on_failure=skip)")
+            else:
+                logger.error(f"[YamlRunner] Step {step_name} failed, aborting (on_failure=abort)")
+                aborted = True
+                break
 
     # --- Teardown ---
-    await browser.close()
-    await pw.stop()
-    ctx.browser.mode = ""
+    await session.stop()
     logger.info("[YamlRunner] Browser closed")
 
     total = len(steps)
@@ -296,8 +322,7 @@ async def run_yaml_case(
     if aborted:
         report["aborted"] = True
 
-    # Save report
-    _save_yaml_report(report, rd)
+    save_report(report, rd, label="YamlRunner")
 
     await event_bus.publish(Event(
         type="execution_completed",
@@ -312,57 +337,31 @@ def list_yaml_cases(cases_root: Path) -> list[dict]:
     """List all YAML-defined cases in a directory tree.
 
     Looks for directories containing ``case.yaml`` or ``case.yml``.
+    Deduplicates by resolved directory path (not just directory name).
     """
     cases = []
+    seen_paths: set[str] = set()
     if not cases_root.exists():
         return cases
 
-    for yaml_file in sorted(cases_root.rglob("case.yaml")):
-        d = yaml_file.parent
-        case_id = d.name
-        try:
-            data = load_yaml_case(d)
-            cases.append({
-                "id": case_id,
-                "name": data.get("name", case_id),
-                "dir": str(d),
-                "steps": data.get("steps", []),
-                "source": "yaml",
-            })
-        except Exception as e:
-            logger.warning(f"[YamlRunner] Failed to load case {case_id}: {e}")
-
-    # Also check for case.yml
-    for yaml_file in sorted(cases_root.rglob("case.yml")):
-        d = yaml_file.parent
-        case_id = d.name
-        if any(c["id"] == case_id for c in cases):
-            continue  # already found via case.yaml
-        try:
-            data = load_yaml_case(d)
-            cases.append({
-                "id": case_id,
-                "name": data.get("name", case_id),
-                "dir": str(d),
-                "steps": data.get("steps", []),
-                "source": "yaml",
-            })
-        except Exception as e:
-            logger.warning(f"[YamlRunner] Failed to load case {case_id}: {e}")
+    for pattern in ("case.yaml", "case.yml"):
+        for yaml_file in sorted(cases_root.rglob(pattern)):
+            d = yaml_file.parent.resolve()
+            d_key = str(d)
+            if d_key in seen_paths:
+                continue
+            seen_paths.add(d_key)
+            case_id = d.name
+            try:
+                data = load_yaml_case(d)
+                cases.append({
+                    "id": case_id,
+                    "name": data.get("name", case_id),
+                    "dir": str(d),
+                    "steps": data.get("steps", []),
+                    "source": "yaml",
+                })
+            except Exception as e:
+                logger.warning(f"[YamlRunner] Failed to load case {case_id}: {e}")
 
     return cases
-
-
-def _save_yaml_report(report: dict, case_dir: Path) -> None:
-    """Save report.json to the case directory."""
-    import json
-    from datetime import datetime
-
-    results_dir = case_dir / "test_results"
-    ts_dir = results_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
-    ts_dir.mkdir(parents=True, exist_ok=True)
-
-    (ts_dir / "report.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    logger.info(f"[YamlRunner] Report saved to {ts_dir}")

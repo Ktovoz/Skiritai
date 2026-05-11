@@ -24,12 +24,9 @@ from __future__ import annotations
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
 
-from playwright.async_api import async_playwright, Browser, BrowserContext, Page
-
+from skiritai.core._session import BrowserSession, OnLogCallback, save_report
 from skiritai.core.ai_context import AIContext, ActionMode
-from skiritai.core.browser import get_launch_args
 from skiritai.core.case_context import CaseContext
 from skiritai.events import Event, event_bus
 from skiritai.logger import logger
@@ -39,67 +36,73 @@ class FlowAI:
     """Standalone AI context that manages its own browser lifecycle.
 
     Created by :func:`flow`.  Do not instantiate directly.
+
+    A single ``AIContext`` is reused across steps so that pre-loaded
+    perception data (``analyze_page``, ``get_page_info``) carries over
+    to subsequent ``action()`` calls within the same flow session.
     """
 
     def __init__(
         self,
-        headless: bool | None = None,
+        session: BrowserSession,
         results_dir: Path | None = None,
         max_steps: int = 20,
+        on_log: OnLogCallback = None,
     ):
-        self._headless = headless
+        self._session = session
         self._results_dir = results_dir
         self._max_steps = max_steps
-        self._pw = None
-        self._browser: Browser | None = None
-        self._context: BrowserContext | None = None
-        self._page: Page | None = None
-        self._ai: AIContext | None = None
+        self._on_log = on_log
         self._ctx = CaseContext(case_dir=results_dir or Path("."), execution_id="flow")
         self._step_counter = 0
         self._results: list[dict] = []
         self._screenshots: list[dict] = []
-        self._started_at: float = 0.0
-
-    async def _start(self) -> None:
-        """Launch browser — called when entering the context manager."""
-        self._pw = await async_playwright().start()
-        self._browser = await self._pw.chromium.launch(**get_launch_args(self._headless))
-        self._context = await self._browser.new_context()
-        self._page = await self._context.new_page()
-        self._ctx.browser.mode = "standard"
-        self._ctx.browser.started_at = time.time()
-        self._started_at = time.time()
-        logger.info("[Flow] Browser launched")
-
-    async def _stop(self) -> None:
-        """Close browser — called when exiting the context manager."""
-        if self._browser:
-            await self._browser.close()
-        if self._pw:
-            await self._pw.stop()
-        self._ctx.browser.mode = ""
-        logger.info("[Flow] Browser closed")
-
-        # Save report if results_dir is set
-        if self._results_dir and self._results:
-            self._save_report()
+        # Reused AIContext — preserves analyze_page / get_page_info cache
+        self._ai: AIContext | None = None
 
     def _next_step_id(self, prefix: str = "") -> str:
         self._step_counter += 1
         return f"{prefix}{self._step_counter}" if prefix else f"step_{self._step_counter}"
 
-    def _make_ai(self, step_id: str) -> AIContext:
-        return AIContext(
-            page=self._page,
+    def _ensure_ai(self, step_id: str) -> AIContext:
+        """Get or create the persistent AIContext for this session.
+
+        If one already exists and has a matching step_id, reuse it (preserving
+        cached perception data).  Otherwise create a fresh one.
+        """
+        if self._ai is not None and self._ai.step_id == step_id:
+            return self._ai
+        self._ai = AIContext(
+            page=self._session.page,
             case_dir=self._results_dir or Path("."),
             step_id=step_id,
+            on_log=self._on_log,
             default_mode="auto",
             execution_id="flow",
             max_steps=self._max_steps,
         )
+        return self._ai
 
-    # ---- Public API (mirrors AIContext) ----
+    def _advance_ai(self, step_id: str) -> AIContext:
+        """Create a new AIContext for a new step, carrying over perception cache."""
+        old = self._ai
+        ai = AIContext(
+            page=self._session.page,
+            case_dir=self._results_dir or Path("."),
+            step_id=step_id,
+            on_log=self._on_log,
+            default_mode="auto",
+            execution_id="flow",
+            max_steps=self._max_steps,
+        )
+        # Carry over cached perception data from previous context
+        if old is not None:
+            ai._page_analysis = old._page_analysis
+            ai._page_info = old._page_info
+        self._ai = ai
+        return ai
+
+    # ---- Public API ----
 
     async def action(self, description: str, mode: ActionMode | None = None) -> dict:
         """Execute a natural-language action via the AI agent.
@@ -112,8 +115,7 @@ class FlowAI:
             Result dict with keys: success, summary, steps.
         """
         step_id = self._next_step_id()
-        ai = self._make_ai(step_id)
-        self._ai = ai
+        ai = self._advance_ai(step_id)
         self._ctx.current_step = step_id
         ai._step_started_at = time.time()
 
@@ -143,7 +145,6 @@ class FlowAI:
             data={"step_id": step_id, "summary": result.get("summary", "")},
         ))
 
-        self._ai = None
         self._ctx.current_step = None
         return result
 
@@ -158,8 +159,7 @@ class FlowAI:
             dict with keys: passed, reason, screenshot.
         """
         step_id = self._next_step_id("verify_")
-        ai = self._make_ai(step_id)
-        self._ai = ai
+        ai = self._advance_ai(step_id)
         self._ctx.current_step = step_id
         ai._step_started_at = time.time()
 
@@ -175,7 +175,6 @@ class FlowAI:
             "elapsed": round(ai._step_elapsed, 2),
         }
         self._results.append(entry)
-        self._ai = None
         self._ctx.current_step = None
         return result
 
@@ -189,33 +188,37 @@ class FlowAI:
             File path of the saved screenshot.
         """
         step_id = self._next_step_id("ss_")
-        ai = self._make_ai(step_id)
+        ai = self._ensure_ai(step_id)
         ai._step_started_at = time.time()
         path = await ai.screenshot(name)
         self._screenshots.append({"name": name, "path": path})
         return path
 
     async def analyze_page(self) -> dict:
-        """Analyze page DOM and return structured data."""
+        """Analyze page DOM and return structured data.
+
+        The result is cached and automatically injected into subsequent
+        ``action()`` calls in this flow session.
+        """
         step_id = self._next_step_id("analyze_")
-        ai = self._make_ai(step_id)
+        ai = self._ensure_ai(step_id)
         return await ai.analyze_page()
 
     async def get_page_info(self) -> str:
-        """Get page title, URL, and text summary."""
+        """Get page title, URL, and text summary.
+
+        The result is cached and automatically injected into subsequent
+        ``action()`` calls in this flow session.
+        """
         step_id = self._next_step_id("info_")
-        ai = self._make_ai(step_id)
+        ai = self._ensure_ai(step_id)
         return await ai.get_page_info()
 
     # ---- Report ----
 
     def _save_report(self) -> None:
-        import json
-        from datetime import datetime
-
-        results_dir = self._results_dir
-        ts_dir = results_dir / "test_results" / datetime.now().strftime("%Y%m%d_%H%M%S")
-        ts_dir.mkdir(parents=True, exist_ok=True)
+        if not self._results_dir or not self._results:
+            return
 
         report = {
             "case_name": "flow",
@@ -224,13 +227,9 @@ class FlowAI:
             "success_count": sum(1 for r in self._results if r["status"] in ("success", "passed")),
             "failed_count": sum(1 for r in self._results if r["status"] == "failed"),
             "steps": self._results,
-            "elapsed_seconds": round(time.time() - self._started_at, 2),
+            "elapsed_seconds": round(time.time() - self._session.started_at, 2),
         }
-
-        (ts_dir / "report.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
-        logger.info(f"[Flow] Report saved to {ts_dir}")
+        save_report(report, self._results_dir, label="Flow")
 
 
 @asynccontextmanager
@@ -238,6 +237,7 @@ async def flow(
     headless: bool | None = None,
     results_dir: Path | str | None = None,
     max_steps: int = 20,
+    on_log: OnLogCallback = None,
 ):
     """Functional test context — no subclass needed.
 
@@ -248,6 +248,7 @@ async def flow(
         headless: Run browser in headless mode. ``None`` = read from env.
         results_dir: Directory to save results and reports.
         max_steps: Maximum agent tool-call steps per action.
+        on_log: Optional callback for real-time log streaming.
 
     Yields:
         :class:`FlowAI` instance.
@@ -265,9 +266,13 @@ async def flow(
     register_all_tools()
 
     rd = Path(results_dir) if results_dir else None
-    runner = FlowAI(headless=headless, results_dir=rd, max_steps=max_steps)
-    await runner._start()
+    session = BrowserSession(headless=headless)
+    await session.start()
+    logger.info("[Flow] Browser launched")
     try:
+        runner = FlowAI(session=session, results_dir=rd, max_steps=max_steps, on_log=on_log)
         yield runner
     finally:
-        await runner._stop()
+        runner._save_report()
+        await session.stop()
+        logger.info("[Flow] Browser closed")

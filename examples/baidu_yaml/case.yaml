@@ -9,5 +9,9 @@ steps:
   - name: 验证结果
     verify: 搜索结果页面正常加载，包含与搜索关键词相关的结果
 
+  - name: 可选检查
+    action: 检查页面是否有高级搜索链接
+    on_failure: skip
+
   - name: 截图
     screenshot: search_result

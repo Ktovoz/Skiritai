@@ -69,7 +69,11 @@ def main():
 
 
 def _cmd_run(args):
-    """Run a test case (Python or YAML, auto-detected)."""
+    """Run a test case (Python or YAML, auto-detected).
+
+    Detection priority when both case.py and case.yaml exist: Python wins.
+    Use ``run_yaml_case()`` in Python code to explicitly run a YAML case.
+    """
     from dotenv import load_dotenv
     load_dotenv()
 
@@ -83,7 +87,8 @@ def _cmd_run(args):
 
     results_dir = Path(args.results_dir).resolve() if args.results_dir else None
 
-    # Auto-detect: YAML case if case.yaml exists and no case.py
+    # Detection priority: case.py > case.yaml/case.yml.
+    # When both exist, Python is preferred. Use run_yaml_case() to force YAML.
     has_yaml = (case_dir / "case.yaml").is_file() or (case_dir / "case.yml").is_file()
     has_py = (case_dir / "case.py").is_file()
 
