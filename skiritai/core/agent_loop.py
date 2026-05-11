@@ -96,11 +96,16 @@ def register_all_tools() -> None:
     import skiritai.core.perception  # noqa: F401 — registers perception tools
 
 
+# Cached LLM instance — built once per process lifetime
+_cached_llm: Any = None
+
+
 def _build_llm():
     """Build and return a cached LLM instance.
 
     The LLM instance is cached at module level so it's only built once per
     process lifetime.  LLM provider configuration does not change at runtime.
+    Use ``reset_llm_cache()`` in tests that modify environment variables.
     """
     global _cached_llm
     if _cached_llm is None:
@@ -109,7 +114,10 @@ def _build_llm():
     return _cached_llm
 
 
-_cached_llm: Any = None
+def reset_llm_cache() -> None:
+    """Reset the cached LLM instance. Use in tests that change LLM env vars."""
+    global _cached_llm
+    _cached_llm = None
 
 
 def build_agent(system_prompt: str | None = None):

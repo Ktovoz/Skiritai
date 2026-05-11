@@ -47,11 +47,10 @@ def _verify_script(script_path: Path) -> bool:
     return True
 
 
-def _save_script_hash(script_path: Path) -> None:
+def _save_script_hash(script_path: Path, script_content: str) -> None:
     """Save a SHA256 hash alongside the script for later verification."""
     hash_path = Path(str(script_path) + SCRIPT_HASH_SUFFIX)
-    content = script_path.read_text(encoding="utf-8")
-    hash_path.write_text(_compute_script_hash(content), encoding="utf-8")
+    hash_path.write_text(_compute_script_hash(script_content), encoding="utf-8")
 
 
 class AIContext:
@@ -340,7 +339,7 @@ class AIContext:
         if result.get("success"):
             script = generate_replay_script(self.step_id, result.get("steps", []))
             self.script_path.write_text(script, encoding="utf-8")
-            _save_script_hash(self.script_path)
+            _save_script_hash(self.script_path, script)
             logger.info(f"[Explore] {self.step_id}: script saved to {self.script_path}")
 
         return result
