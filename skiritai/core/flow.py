@@ -269,8 +269,8 @@ async def flow(
     session = BrowserSession(headless=headless)
     await session.start()
     logger.info("[Flow] Browser launched")
+    runner = FlowAI(session=session, results_dir=rd, max_steps=max_steps, on_log=on_log)
     try:
-        runner = FlowAI(session=session, results_dir=rd, max_steps=max_steps, on_log=on_log)
         yield runner
     finally:
         runner._save_report()
