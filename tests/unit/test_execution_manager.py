@@ -8,9 +8,10 @@ from pathlib import Path
 import pytest
 
 
-def _ensure_clean():
-    from skiritai.core.execution_manager import _executions
-    _executions.clear()
+async def _ensure_clean():
+    from skiritai.core.execution_manager import _executions, _lock
+    async with _lock:
+        _executions.clear()
 
 
 # ============================================================
@@ -24,19 +25,19 @@ class TestRegisterExecution:
         from skiritai.core.execution_manager import register_execution, is_running, _executions
 
         async def _test():
-            _ensure_clean()
+            await _ensure_clean()
 
             async def dummy():
                 await asyncio.sleep(60)
 
             task = asyncio.create_task(dummy())
             try:
-                register_execution("case_a", task)
+                await register_execution("case_a", task)
                 assert "case_a" in _executions
-                assert is_running("case_a") is True
+                assert await is_running("case_a") is True
             finally:
                 task.cancel()
-                _ensure_clean()
+                await _ensure_clean()
 
         asyncio.run(_test())
 
@@ -44,7 +45,7 @@ class TestRegisterExecution:
         from skiritai.core.execution_manager import register_execution, _executions
 
         async def _test():
-            _ensure_clean()
+            await _ensure_clean()
 
             async def dummy():
                 await asyncio.sleep(60)
@@ -52,36 +53,39 @@ class TestRegisterExecution:
             task1 = asyncio.create_task(dummy())
             task2 = asyncio.create_task(dummy())
             try:
-                register_execution("case_b", task1)
-                register_execution("case_b", task2)
+                await register_execution("case_b", task1)
+                await register_execution("case_b", task2)
                 assert _executions["case_b"] is task2
             finally:
                 task1.cancel()
                 task2.cancel()
-                _ensure_clean()
+                await _ensure_clean()
 
         asyncio.run(_test())
 
     def test_is_running_false_for_unknown_case(self):
         from skiritai.core.execution_manager import is_running
 
-        _ensure_clean()
-        assert is_running("nonexistent") is False
+        async def _test():
+            await _ensure_clean()
+            assert await is_running("nonexistent") is False
+
+        asyncio.run(_test())
 
     def test_is_running_false_for_done_task(self):
         from skiritai.core.execution_manager import register_execution, is_running
 
         async def _test():
-            _ensure_clean()
+            await _ensure_clean()
 
             async def quick():
                 pass
 
             task = asyncio.create_task(quick())
-            register_execution("case_c", task)
+            await register_execution("case_c", task)
             await asyncio.sleep(0.01)  # let it complete
-            assert is_running("case_c") is False
-            _ensure_clean()
+            assert await is_running("case_c") is False
+            await _ensure_clean()
 
         asyncio.run(_test())
 
@@ -97,13 +101,13 @@ class TestCancelExecution:
         from skiritai.core.execution_manager import register_execution, cancel_execution, _executions
 
         async def _test():
-            _ensure_clean()
+            await _ensure_clean()
 
             async def dummy():
                 await asyncio.sleep(60)
 
             task = asyncio.create_task(dummy())
-            register_execution("case_x", task)
+            await register_execution("case_x", task)
 
             cancelled = await cancel_execution("case_x")
             assert cancelled is True
@@ -114,7 +118,7 @@ class TestCancelExecution:
                 await asyncio.wait_for(task, timeout=0.1)
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
-            _ensure_clean()
+            await _ensure_clean()
 
         asyncio.run(_test())
 
@@ -122,18 +126,18 @@ class TestCancelExecution:
         from skiritai.core.execution_manager import register_execution, cancel_execution
 
         async def _test():
-            _ensure_clean()
+            await _ensure_clean()
 
             async def quick():
                 pass
 
             task = asyncio.create_task(quick())
-            register_execution("case_y", task)
+            await register_execution("case_y", task)
             await asyncio.sleep(0.01)  # let it complete
 
             cancelled = await cancel_execution("case_y")
             assert cancelled is False
-            _ensure_clean()
+            await _ensure_clean()
 
         asyncio.run(_test())
 
@@ -141,7 +145,7 @@ class TestCancelExecution:
         from skiritai.core.execution_manager import cancel_execution
 
         async def _test():
-            _ensure_clean()
+            await _ensure_clean()
             cancelled = await cancel_execution("does_not_exist")
             assert cancelled is False
 
@@ -159,28 +163,31 @@ class TestUnregisterExecution:
         from skiritai.core.execution_manager import register_execution, unregister_execution, _executions
 
         async def _test():
-            _ensure_clean()
+            await _ensure_clean()
 
             async def dummy():
                 await asyncio.sleep(60)
 
             task = asyncio.create_task(dummy())
             try:
-                register_execution("case_z", task)
+                await register_execution("case_z", task)
                 assert "case_z" in _executions
-                unregister_execution("case_z")
+                await unregister_execution("case_z")
                 assert "case_z" not in _executions
             finally:
                 task.cancel()
-                _ensure_clean()
+                await _ensure_clean()
 
         asyncio.run(_test())
 
     def test_unregister_nonexistent_no_error(self):
         from skiritai.core.execution_manager import unregister_execution
 
-        _ensure_clean()
-        unregister_execution("does_not_exist")
+        async def _test():
+            await _ensure_clean()
+            await unregister_execution("does_not_exist")
+
+        asyncio.run(_test())
 
 
 # ============================================================
@@ -188,7 +195,7 @@ class TestUnregisterExecution:
 # ============================================================
 
 class TestExecutionLifecycle:
-    """Test full register → cancel → unregister lifecycle."""
+    """Test full register -> cancel -> unregister lifecycle."""
 
     def test_full_lifecycle(self):
         from skiritai.core.execution_manager import (
@@ -197,29 +204,29 @@ class TestExecutionLifecycle:
         )
 
         async def _test():
-            _ensure_clean()
+            await _ensure_clean()
 
             async def work():
                 await asyncio.sleep(60)
 
             task = asyncio.create_task(work())
             try:
-                register_execution("lifecycle_case", task)
-                assert is_running("lifecycle_case") is True
+                await register_execution("lifecycle_case", task)
+                assert await is_running("lifecycle_case") is True
                 assert "lifecycle_case" in _executions
 
                 cancelled = await cancel_execution("lifecycle_case")
                 assert cancelled is True
-                assert is_running("lifecycle_case") is False
+                assert await is_running("lifecycle_case") is False
                 assert "lifecycle_case" not in _executions
 
-                unregister_execution("lifecycle_case")  # should not raise
+                await unregister_execution("lifecycle_case")  # should not raise
             finally:
                 try:
                     task.cancel()
                 except Exception:
                     pass
-                _ensure_clean()
+                await _ensure_clean()
 
         asyncio.run(_test())
 
@@ -229,7 +236,7 @@ class TestExecutionLifecycle:
         )
 
         async def _test():
-            _ensure_clean()
+            await _ensure_clean()
 
             async def work():
                 await asyncio.sleep(60)
@@ -238,17 +245,17 @@ class TestExecutionLifecycle:
             task_b = asyncio.create_task(work())
             task_c = asyncio.create_task(work())
             try:
-                register_execution("A", task_a)
-                register_execution("B", task_b)
-                register_execution("C", task_c)
+                await register_execution("A", task_a)
+                await register_execution("B", task_b)
+                await register_execution("C", task_c)
 
-                assert is_running("A") and is_running("B") and is_running("C")
+                assert await is_running("A") and await is_running("B") and await is_running("C")
                 assert len(_executions) == 3
 
                 await cancel_execution("B")
-                assert is_running("A") is True
-                assert is_running("B") is False
-                assert is_running("C") is True
+                assert await is_running("A") is True
+                assert await is_running("B") is False
+                assert await is_running("C") is True
                 assert len(_executions) == 2
                 assert "B" not in _executions
             finally:
@@ -257,7 +264,7 @@ class TestExecutionLifecycle:
                         t.cancel()
                     except Exception:
                         pass
-                _ensure_clean()
+                await _ensure_clean()
 
         asyncio.run(_test())
 

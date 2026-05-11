@@ -1,6 +1,7 @@
 """AI Action context — manages replay scripts and agent execution."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Callable, Literal
@@ -10,6 +11,47 @@ from skiritai.core.script_generator import generate_replay_script
 from skiritai.logger import logger
 
 ActionMode = Literal["auto", "explore", "replay"]
+
+# ---------------------------------------------------------------------------
+# Replay script integrity
+# ---------------------------------------------------------------------------
+
+SCRIPT_HASH_SUFFIX = ".sha256"
+
+
+def _compute_script_hash(content: str) -> str:
+    """Compute SHA256 hash of script content."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def _verify_script(script_path: Path) -> bool:
+    """Verify the script file matches its stored hash.
+
+    Returns True if the hash file exists and matches, or if no hash file
+    exists (backward-compatible with pre-hash scripts).
+    """
+    hash_path = Path(str(script_path) + SCRIPT_HASH_SUFFIX)
+    if not hash_path.exists():
+        # Backward compatible: scripts saved before hash verification was added
+        return True
+
+    content = script_path.read_text(encoding="utf-8")
+    expected = hash_path.read_text(encoding="utf-8").strip()
+    actual = _compute_script_hash(content)
+    if actual != expected:
+        logger.error(
+            f"[Security] Replay script hash mismatch: {script_path}. "
+            f"Expected {expected[:16]}..., got {actual[:16]}..."
+        )
+        return False
+    return True
+
+
+def _save_script_hash(script_path: Path) -> None:
+    """Save a SHA256 hash alongside the script for later verification."""
+    hash_path = Path(str(script_path) + SCRIPT_HASH_SUFFIX)
+    content = script_path.read_text(encoding="utf-8")
+    hash_path.write_text(_compute_script_hash(content), encoding="utf-8")
 
 
 class AIContext:
@@ -248,6 +290,13 @@ class AIContext:
         """Execute the saved replay script directly without AI reasoning."""
         logger.info(f"[Replay] {self.step_id}: executing {self.script_path}")
 
+        if not _verify_script(self.script_path):
+            return {
+                "success": False,
+                "summary": f"回放脚本完整性校验失败 — 脚本可能已被篡改。请用 explore 模式重新生成。",
+                "steps": [],
+            }
+
         try:
             script_content = self.script_path.read_text(encoding="utf-8")
 
@@ -291,6 +340,7 @@ class AIContext:
         if result.get("success"):
             script = generate_replay_script(self.step_id, result.get("steps", []))
             self.script_path.write_text(script, encoding="utf-8")
+            _save_script_hash(self.script_path)
             logger.info(f"[Explore] {self.step_id}: script saved to {self.script_path}")
 
         return result

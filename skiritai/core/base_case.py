@@ -199,6 +199,10 @@ class BaseCase:
     # Override via class attribute or @max_steps(N) decorator on individual methods.
     max_steps: int = 20
 
+    # Whether to delete temporary screenshot files after copying them to the
+    # results directory.  Set to True to keep disk usage low in CI pipelines.
+    cleanup_temp_screenshots: bool = False
+
     def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None):
         self._case_dir = case_dir or Path(inspect.getfile(self.__class__)).parent
         self._execution_id = execution_id or "default"
@@ -764,22 +768,34 @@ class BaseCase:
         m, s = divmod(int(seconds), 60)
         return f"{m}m{s}s"
 
+    # ---- Report rendering ----
+
+    # Cached HTML template (loaded once per process lifetime)
+    _template_html: str | None = None
+
+    @classmethod
+    def _load_template(cls) -> str | None:
+        """Load the Vue + Ant Design report template, cached in memory."""
+        if cls._template_html is not None:
+            return cls._template_html
+
+        template_paths = [
+            Path(__file__).parent.parent.parent / "report" / "dist" / "index.html",
+            Path(__file__).parent / "templates" / "report.html",
+        ]
+        for tp in template_paths:
+            if tp.exists():
+                cls._template_html = tp.read_text(encoding="utf-8")
+                return cls._template_html
+        return None
+
     @staticmethod
     def _render_html(report: dict) -> str:
         """Render the report using the Vue + Ant Design SPA template."""
         import base64
         import json
 
-        # Look for the built Vue template
-        template_paths = [
-            Path(__file__).parent.parent.parent / "report" / "dist" / "index.html",
-            Path(__file__).parent / "templates" / "report.html",
-        ]
-        template_html = None
-        for tp in template_paths:
-            if tp.exists():
-                template_html = tp.read_text(encoding="utf-8")
-                break
+        template_html = BaseCase._load_template()
 
         if template_html is None:
             return f"<html><body><pre>{json.dumps(report, ensure_ascii=False, indent=2)}</pre></body></html>"
@@ -821,6 +837,11 @@ class BaseCase:
                         shutil.copy2(src, dst)
                         s["path"] = str(dst)
                         new_paths.append(s)
+                        if self.cleanup_temp_screenshots:
+                            try:
+                                src.unlink()
+                            except OSError:
+                                pass
                 except Exception:
                     pass
             step["screenshots"] = new_paths

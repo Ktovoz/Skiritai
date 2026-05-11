@@ -93,5 +93,3 @@ def list_cases(cases_root: Path) -> list[dict]:
             logger.warning(f"[PyRunner] Failed to load case {case_id}: {e}")
 
     return cases
-
-    return cases

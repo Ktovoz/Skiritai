@@ -97,8 +97,19 @@ def register_all_tools() -> None:
 
 
 def _build_llm():
-    provider = get_provider()
-    return provider.build()
+    """Build and return a cached LLM instance.
+
+    The LLM instance is cached at module level so it's only built once per
+    process lifetime.  LLM provider configuration does not change at runtime.
+    """
+    global _cached_llm
+    if _cached_llm is None:
+        provider = get_provider()
+        _cached_llm = provider.build()
+    return _cached_llm
+
+
+_cached_llm: Any = None
 
 
 def build_agent(system_prompt: str | None = None):
@@ -240,24 +251,23 @@ def _accumulate_token_usage(event: dict, token_usage: dict) -> None:
     """Extract token usage metadata from LangGraph streaming events."""
     try:
         # LangGraph stores usage metadata on agent messages
-        for key in ("agent",):
-            if key not in event:
-                continue
-            messages = event[key].get("messages", [])
-            for msg in messages:
-                usage = getattr(msg, "usage_metadata", None)
-                if usage and isinstance(usage, dict):
-                    token_usage["prompt_tokens"] += usage.get("input_tokens", 0)
-                    token_usage["completion_tokens"] += usage.get("output_tokens", 0)
-                    token_usage["total_tokens"] += usage.get("total_tokens", 0)
+        if "agent" not in event:
+            return
+        messages = event["agent"].get("messages", [])
+        for msg in messages:
+            usage = getattr(msg, "usage_metadata", None)
+            if usage and isinstance(usage, dict):
+                token_usage["prompt_tokens"] += usage.get("input_tokens", 0)
+                token_usage["completion_tokens"] += usage.get("output_tokens", 0)
+                token_usage["total_tokens"] += usage.get("total_tokens", 0)
 
-                # Fallback: response_metadata (some LangChain versions)
-                resp_meta = getattr(msg, "response_metadata", None)
-                if resp_meta and isinstance(resp_meta, dict):
-                    token_info = resp_meta.get("token_usage", {})
-                    if token_info:
-                        token_usage["prompt_tokens"] += token_info.get("prompt_tokens", 0)
-                        token_usage["completion_tokens"] += token_info.get("completion_tokens", 0)
-                        token_usage["total_tokens"] += token_info.get("total_tokens", 0)
+            # Fallback: response_metadata (some LangChain versions)
+            resp_meta = getattr(msg, "response_metadata", None)
+            if resp_meta and isinstance(resp_meta, dict):
+                token_info = resp_meta.get("token_usage", {})
+                if token_info:
+                    token_usage["prompt_tokens"] += token_info.get("prompt_tokens", 0)
+                    token_usage["completion_tokens"] += token_info.get("completion_tokens", 0)
+                    token_usage["total_tokens"] += token_info.get("total_tokens", 0)
     except Exception:
         pass  # token tracking is best-effort
