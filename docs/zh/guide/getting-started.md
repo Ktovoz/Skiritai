@@ -35,3 +35,30 @@ skiritai run . --case example.py
 ```
 
 第一次运行时，AI 会探索并找出正确的选择器。后续运行时，生成的回放脚本直接全速执行。
+
+## 另一种方式：Flow API（无需继承）
+
+更喜欢函数式风格？试试 [Flow API](/zh/guide/flow-api) — 无需 `BaseCase`，无需装饰器：
+
+```python
+from skiritai import flow
+
+async with flow() as ai:
+    await ai.action("导航到 GitHub 并搜索 Skiritai")
+    await ai.verify("搜索结果包含 Skiritai")
+```
+
+## 另一种方式：YAML 用例（零代码）
+
+完全不想写 Python？用 [YAML](/zh/guide/yaml-cases) 定义测试：
+
+```yaml
+# case.yaml
+steps:
+  - action: 导航到 GitHub 并搜索 Skiritai
+  - verify: 搜索结果包含 Skiritai
+```
+
+```bash
+skiritai run .
+```

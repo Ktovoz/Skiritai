@@ -9,6 +9,8 @@ skiritai run <case_dir>
 skiritai run . --case my_test.py
 ```
 
+同时支持 Python `BaseCase` 类和 [YAML 用例](/zh/guide/yaml-cases)（`case.yaml`），运行器会自动检测用例类型。
+
 选项：
 
 - `--case` — 运行指定的用例文件
