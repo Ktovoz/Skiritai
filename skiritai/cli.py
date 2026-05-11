@@ -69,14 +69,12 @@ def main():
 
 
 def _cmd_run(args):
-    """Run a test case."""
+    """Run a test case (Python or YAML, auto-detected)."""
     from dotenv import load_dotenv
     load_dotenv()
 
     from skiritai.core.agent_loop import register_all_tools
     register_all_tools()
-
-    from skiritai.core.runner import run_case
 
     case_dir = Path(args.case_dir).resolve()
     if not case_dir.exists():
@@ -85,7 +83,16 @@ def _cmd_run(args):
 
     results_dir = Path(args.results_dir).resolve() if args.results_dir else None
 
-    report = asyncio.run(run_case(case_dir, results_dir=results_dir))
+    # Auto-detect: YAML case if case.yaml exists and no case.py
+    has_yaml = (case_dir / "case.yaml").is_file() or (case_dir / "case.yml").is_file()
+    has_py = (case_dir / "case.py").is_file()
+
+    if has_yaml and not has_py:
+        from skiritai.core.yaml_runner import run_yaml_case
+        report = asyncio.run(run_yaml_case(case_dir, results_dir=results_dir))
+    else:
+        from skiritai.core.runner import run_case
+        report = asyncio.run(run_case(case_dir, results_dir=results_dir))
 
     # Print report
     print(f"\n{'=' * 60}")
@@ -138,9 +145,26 @@ def _cmd_list(args):
 
     print(f"Found {len(cases)} case(s) in {cases_root}:\n")
     for c in cases:
-        print(f"  {c['id']}")
-        print(f"    Class: {c['name']}")
-        print(f"    Steps: {', '.join(c['steps']) or '(none)'}")
+        source = c.get("source", "python")
+        tag = " [yaml]" if source == "yaml" else ""
+        print(f"  {c['id']}{tag}")
+        print(f"    Name:  {c['name']}")
+        steps = c.get("steps", [])
+        if steps and isinstance(steps, list):
+            if isinstance(steps[0], str):
+                print(f"    Steps: {', '.join(steps)}")
+            elif isinstance(steps[0], dict):
+                step_summaries = []
+                for s in steps:
+                    for key in ("action", "verify", "screenshot", "analyze", "page_info"):
+                        if key in s:
+                            step_summaries.append(f"{key}: {s[key]}")
+                            break
+                print(f"    Steps: {'; '.join(step_summaries)}")
+            else:
+                print(f"    Steps: {len(steps)} defined")
+        else:
+            print(f"    Steps: (none)")
         print()
 
 
