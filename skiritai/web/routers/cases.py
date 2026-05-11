@@ -21,19 +21,33 @@ router = APIRouter(prefix="/api/cases", tags=["cases"])
 # Configurable cases root — set via create_app() or SKIRITAI_CASES_ROOT
 CASES_ROOT = Path.cwd() / "examples"
 
+# Case index cache: {case_id: Path} — rebuilt when set_cases_root() is called
+_case_index: dict[str, Path] | None = None
+
+
+def _build_case_index() -> dict[str, Path]:
+    """Scan CASES_ROOT and build a {case_id: directory_path} index."""
+    index: dict[str, Path] = {}
+    if CASES_ROOT.exists():
+        for case_py in CASES_ROOT.rglob("case.py"):
+            index[case_py.parent.name] = case_py.parent
+    return index
+
 
 def set_cases_root(root: Path) -> None:
     """Set the root directory for case discovery. Called by create_app()."""
-    global CASES_ROOT
+    global CASES_ROOT, _case_index
     CASES_ROOT = root.resolve()
+    _case_index = _build_case_index()
+    logger.info(f"[API] Cases root: {CASES_ROOT} ({len(_case_index)} cases indexed)")
 
 
 def _find_case_dir(case_id: str) -> Path | None:
-    """Find a case directory by its leaf name, searching recursively."""
-    for case_py in CASES_ROOT.rglob("case.py"):
-        if case_py.parent.name == case_id:
-            return case_py.parent
-    return None
+    """Find a case directory by its leaf name (uses cached index)."""
+    global _case_index
+    if _case_index is None:
+        _case_index = _build_case_index()
+    return _case_index.get(case_id)
 
 
 def _get_case_dir_or_404(case_id: str) -> Path:
@@ -117,7 +131,7 @@ async def api_run_case(case_id: str):
         results_dir = case_dir / "test_results" / timestamp
         try:
             report = await run_case(case_dir, execution_id=case_id, results_dir=results_dir)
-            # Save result to disk
+            # Save result to disk (API path — distinct from CLI path which uses BaseCase._save_report)
             results_dir.mkdir(parents=True, exist_ok=True)
             (results_dir / "report.json").write_text(
                 json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8",
@@ -153,10 +167,10 @@ async def api_run_case(case_id: str):
             )
         finally:
             event_bus.unsubscribe(_ws_bridge)
-            unregister_execution(case_id)
+            await unregister_execution(case_id)
 
     task = asyncio.create_task(_run())
-    register_execution(case_id, task)
+    await register_execution(case_id, task)
     logger.info(f"[API] Case execution started: {case_id}")
 
     return {"case_id": case_id, "status": "started", "message": "Execution started"}

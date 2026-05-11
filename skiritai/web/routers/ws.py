@@ -27,4 +27,4 @@ async def case_ws(websocket: WebSocket, case_id: str):
             except json.JSONDecodeError:
                 logger.warning("[WS] Received invalid JSON from client")
     except WebSocketDisconnect:
-        ws_manager.disconnect(case_id, websocket)
+        await ws_manager.disconnect(case_id, websocket)
