@@ -26,7 +26,7 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/v}"
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
-          if [[ "$TAG" =~ (a|b|rc)[0-9]+$ ]]; then
+          if [[ "$TAG" =~ (a|b|rc)[0-9]*$ ]]; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Pre-release detected: v$TAG"
           else
@@ -44,7 +44,7 @@ jobs:
           #   v*-a* / v*-b* / v*-rc* → develop
           #   else → main
           if [ -z "$BRANCH" ]; then
-            if [[ "$TAG_VERSION" =~ (a|b|rc)[0-9]+$ ]]; then
+            if [[ "$TAG_VERSION" =~ (a|b|rc)[0-9]*$ ]]; then
               BRANCH="develop"
             else
               BRANCH="main"
