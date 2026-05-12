@@ -56,7 +56,7 @@ except ImportError:
 def _require_yaml() -> None:
     if yaml is None:
         raise ImportError(
-            "PyYAML is required for YAML cases. Install with: pip install pyyaml"
+            "PyYAML is required for YAML cases. Install with: pip install PyYAML"
         )
 
 

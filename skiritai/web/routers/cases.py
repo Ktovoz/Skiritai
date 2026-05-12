@@ -313,7 +313,8 @@ async def api_get_result(case_id: str, timestamp: str):
 @router.get("/{case_id}/results/{timestamp}/screenshots/{filename}")
 async def api_get_screenshot(case_id: str, timestamp: str, filename: str):
     """Serve a screenshot file."""
-    if ".." in filename or "/" in filename:
+    import re
+    if not re.match(r'^[a-zA-Z0-9_. -]+$', filename):
         raise HTTPException(status_code=400, detail="Invalid filename")
     screenshot_path = _get_case_dir_or_404(case_id) / "test_results" / timestamp / "screenshots" / filename
     if not screenshot_path.exists():
