@@ -38,3 +38,4 @@ Thumbs.db
 # Test artifacts
 tests/acceptance/.case_context
 **/.case_context
+**/*.sha256
