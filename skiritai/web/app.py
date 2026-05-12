@@ -13,12 +13,14 @@ from skiritai.core.agent_loop import register_all_tools
 from skiritai.web.routers import cases, ws
 
 
-def create_app(cases_root: Path | None = None) -> FastAPI:
+def create_app(cases_root: Path | None = None, llm=None) -> FastAPI:
     """Create and configure the FastAPI application.
 
     Args:
         cases_root: Root directory containing case folders. If None, reads
             from SKIRITAI_CASES_ROOT env var, falling back to ``<cwd>/examples``.
+        llm: Optional LLM provider instance shared by all API requests.
+            If None, auto-detects from environment variables.
     """
     # Explicitly register all tools at startup (Playwright + perception)
     register_all_tools()
@@ -30,6 +32,8 @@ def create_app(cases_root: Path | None = None) -> FastAPI:
 
     # Inject into router module
     cases.set_cases_root(cases_root)
+    if llm is not None:
+        cases.set_llm(llm)
 
     app = FastAPI(title="Skiritai", description="AI 驱动的测试自动化智能体")
 

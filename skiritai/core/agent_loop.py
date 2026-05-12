@@ -96,41 +96,63 @@ def register_all_tools() -> None:
     import skiritai.core.perception  # noqa: F401 — registers perception tools
 
 
-# Cached LLM instance — built once per process lifetime
-_cached_llm: Any = None
+# ---------------------------------------------------------------------------
+# Internal flags — ensure one-time init without user boilerplate
+# ---------------------------------------------------------------------------
+
+_env_loaded: bool = False
+_tools_registered: bool = False
 
 
-def _build_llm():
-    """Build and return a cached LLM instance.
+def _ensure_env() -> None:
+    """Load .env once per process. Safe to call multiple times."""
+    global _env_loaded
+    if not _env_loaded:
+        from dotenv import load_dotenv
+        load_dotenv()
+        _env_loaded = True
 
-    The LLM instance is cached at module level so it's only built once per
-    process lifetime.  LLM provider configuration does not change at runtime.
-    Use ``reset_llm_cache()`` in tests that modify environment variables.
+
+def _ensure_tools() -> None:
+    """Register all tools once per process. Safe to call multiple times."""
+    global _tools_registered
+    if not _tools_registered:
+        register_all_tools()
+        _tools_registered = True
+
+
+def _build_llm(llm=None):
+    """Build and return an LLM instance.
+
+    If *llm* is provided (an :class:`LLMProvider` instance), use it directly.
+    Otherwise auto-detects from environment variables.
+
+    Automatically loads .env on first call.
     """
-    global _cached_llm
-    if _cached_llm is None:
-        provider = get_provider()
-        _cached_llm = provider.build()
-    return _cached_llm
+    _ensure_env()
+    if llm is not None:
+        return llm.build()
+    provider = get_provider()
+    return provider.build()
 
 
-def reset_llm_cache() -> None:
-    """Reset the cached LLM instance. Use in tests that change LLM env vars."""
-    global _cached_llm
-    _cached_llm = None
-
-
-def build_agent(system_prompt: str | None = None):
+def build_agent(system_prompt: str | None = None, llm=None):
     """Build a LangGraph ReAct agent with Playwright tools + perception tools.
+
+    Automatically registers tools and loads .env on first call.
+    No manual setup required.
 
     Args:
         system_prompt: Custom system prompt. If None, uses the default prompt.
+        llm: Optional LLM provider instance. If None, auto-detects from env.
     """
-    llm = _build_llm()
+    _ensure_env()
+    _ensure_tools()
+    model = _build_llm(llm)
     registry = ToolRegistry()
     tools = registry.get_all()
     return create_react_agent(
-        model=llm,
+        model=model,
         tools=tools,
         prompt=system_prompt or SYSTEM_PROMPT,
     )
@@ -144,6 +166,7 @@ async def run_agent(
         execution_id: str = "default",
         case_dir: Path | None = None,
         max_steps: int = 20,
+        llm=None,
 ) -> dict:
     """
     Run the LangGraph ReAct agent on a task.
@@ -155,6 +178,8 @@ async def run_agent(
         on_log: Optional callback for real-time log streaming
         execution_id: Execution identifier for event publishing
         case_dir: Optional case directory for loading case-level system prompt
+        max_steps: Maximum agent tool-call steps (recursion_limit)
+        llm: Optional LLM provider instance. If None, auto-detects from env.
 
     Returns:
         dict with keys: success, summary, steps, token_usage
@@ -163,7 +188,7 @@ async def run_agent(
 
     # Resolve system prompt (case-level > env > default)
     system_prompt = load_system_prompt(case_dir)
-    agent = build_agent(system_prompt=system_prompt)
+    agent = build_agent(system_prompt=system_prompt, llm=llm)
 
     if url:
         user_msg = f"请先导航到 {url}，然后执行以下任务：\n{task_description}"

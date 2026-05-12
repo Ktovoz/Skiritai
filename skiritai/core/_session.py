@@ -52,14 +52,16 @@ class BrowserSession:
 
     async def stop(self) -> None:
         """Close browser and stop Playwright."""
+        if self._context:
+            await self._context.close()
+            self._context = None
         if self._browser:
             await self._browser.close()
+            self._browser = None
         if self._pw:
             await self._pw.stop()
-        self._browser = None
-        self._context = None
+            self._pw = None
         self._page = None
-        self._pw = None
 
     async def __aenter__(self) -> BrowserSession:
         await self.start()

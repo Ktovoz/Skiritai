@@ -203,7 +203,7 @@ class BaseCase:
     # results directory.  Set to True to keep disk usage low in CI pipelines.
     cleanup_temp_screenshots: bool = False
 
-    def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None):
+    def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None, llm=None):
         self._case_dir = case_dir or Path(inspect.getfile(self.__class__)).parent
         self._execution_id = execution_id or "default"
         self._results_dir = results_dir
@@ -216,6 +216,9 @@ class BaseCase:
 
         # Per-case headless override: None = use env var, True/False = explicit
         self.headless: bool | None = None
+
+        # LLM provider — threaded through _make_ai → AIContext → run_agent
+        self._llm = llm
 
         # Global context — state machine + store + browser session info
         self._ctx = CaseContext(
@@ -478,6 +481,7 @@ class BaseCase:
             default_mode=default_mode,
             execution_id=self._execution_id,
             max_steps=effective_max_steps,
+            llm=self._llm,
         )
 
     async def run_step(self, step_name: str, on_log=None) -> dict:

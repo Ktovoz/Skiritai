@@ -38,16 +38,23 @@ jobs:
         run: |
           TAG_VERSION="${{ steps.tag.outputs.version }}"
           IS_PRERELEASE="${{ steps.tag.outputs.is_prerelease }}"
-          BRANCH=$(git branch -r --contains "$GITHUB_SHA" | grep -E 'origin/(main|develop)$' | head -1 | sed 's|.*origin/||')
+          BRANCH=$(git branch -r --contains "$GITHUB_SHA" 2>/dev/null | grep -E 'origin/(main|develop)$' | head -1 | sed 's|.*origin/||')
+
+          # Fallback: on tag push (detached HEAD), infer branch from tag convention
+          #   v*-a* / v*-b* / v*-rc* → develop
+          #   else → main
+          if [ -z "$BRANCH" ]; then
+            if [[ "$TAG_VERSION" =~ (a|b|rc)[0-9]+$ ]]; then
+              BRANCH="develop"
+            else
+              BRANCH="main"
+            fi
+            echo "::notice::Detached HEAD, inferred branch from tag: $BRANCH"
+          fi
 
           echo "Tag: v$TAG_VERSION"
           echo "Branch: $BRANCH"
           echo "Is prerelease: $IS_PRERELEASE"
-
-          if [ -z "$BRANCH" ]; then
-            echo "::error::Tag is not on main or develop branch"
-            exit 1
-          fi
 
           if [ "$BRANCH" = "develop" ] && [ "$IS_PRERELEASE" = "false" ]; then
             echo "::error::develop branch only allows pre-release tags (a/b/rc), got v$TAG_VERSION"
@@ -62,10 +69,29 @@ jobs:
           echo "Tag validation passed"
 
   # ============================================================
+  # Test: 运行测试套件，防止发布有问题的版本
+  # ============================================================
+  test:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install with dev deps
+        run: pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v
+
+  # ============================================================
   # Build: 构建并检查包
   # ============================================================
   build:
-    needs: validate
+    needs: [validate, test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -42,6 +42,7 @@ async def run_case(
         on_log=None,
         execution_id: str | None = None,
         results_dir: Path | None = None,
+        llm=None,
 ) -> dict:
     """Run a Python-based test case.
 
@@ -50,6 +51,7 @@ async def run_case(
         on_log: Optional callback for real-time log streaming
         execution_id: Execution identifier for event publishing
         results_dir: Optional directory for saving screenshots/results
+        llm: Optional LLM provider instance. If None, auto-detects from env.
 
     Returns:
         dict with case_name, status, total_steps, success_count, failed_count, steps
@@ -59,6 +61,7 @@ async def run_case(
         case_dir=case_dir,
         execution_id=execution_id or case_dir.name,
         results_dir=results_dir,
+        llm=llm,
     )
 
     logger.info(f"[PyRunner] Running {case_class.__name__} from {case_dir}")

@@ -50,7 +50,7 @@ from skiritai.core import (
 )
 from skiritai.events import Event, EventBus, event_bus
 
-__version__ = "0.0.2"
+__version__ = "0.0.5a1"
 
 __all__ = [
     # Case framework

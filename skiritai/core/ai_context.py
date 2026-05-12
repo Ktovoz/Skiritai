@@ -1,6 +1,7 @@
 """AI Action context — manages replay scripts and agent execution."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -18,6 +19,43 @@ ActionMode = Literal["auto", "explore", "replay"]
 
 SCRIPT_HASH_SUFFIX = ".sha256"
 
+# AST nodes allowed in replay scripts — blocks imports, exec, eval, etc.
+_ALLOWED_AST_NODES = frozenset({
+    ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.arguments, ast.arg,
+    ast.Expr, ast.Constant, ast.Name, ast.Load, ast.Store, ast.Del,
+    ast.Attribute, ast.Call, ast.keyword, ast.Assign, ast.AnnAssign,
+    ast.AugAssign, ast.Return, ast.Pass, ast.Raise, ast.Assert,
+    ast.If, ast.For, ast.While, ast.Break, ast.Continue, ast.Try,
+    ast.ExceptHandler, ast.With, ast.withitem, ast.Compare, ast.BoolOp,
+    ast.BinOp, ast.UnaryOp, ast.IfExp, ast.Dict, ast.List, ast.Tuple,
+    ast.Set, ast.Subscript, ast.Slice, ast.Starred, ast.JoinedStr,
+    ast.FormattedValue, ast.Await, ast.Attribute, ast.Global, ast.Nonlocal,
+})
+_FORBIDDEN_BUILTINS = frozenset({
+    "exec", "eval", "compile", "__import__", "open", "input",
+    "breakpoint", "memoryview", "help",
+})
+
+
+def _validate_replay_ast(tree: ast.AST) -> None:
+    """Validate that a replay script AST contains only safe node types.
+
+    Raises ValueError if unsafe constructs (imports, exec, eval, etc.) are found.
+    """
+    for node in ast.walk(tree):
+        if type(node) not in _ALLOWED_AST_NODES:
+            raise ValueError(
+                f"Unsafe AST node in replay script: {type(node).__name__}. "
+                f"Script may only use basic control flow and function calls."
+            )
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            raise ValueError("Import statements are not allowed in replay scripts")
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id in _FORBIDDEN_BUILTINS:
+                raise ValueError(
+                    f"Forbidden builtin function '{node.func.id}' in replay script"
+                )
+
 
 def _compute_script_hash(content: str) -> str:
     """Compute SHA256 hash of script content."""
@@ -27,13 +65,17 @@ def _compute_script_hash(content: str) -> str:
 def _verify_script(script_path: Path) -> bool:
     """Verify the script file matches its stored hash.
 
-    Returns True if the hash file exists and matches, or if no hash file
-    exists (backward-compatible with pre-hash scripts).
+    Returns True only if the hash file exists and matches.
+    Scripts without hash files are rejected (backward compatibility:
+    re-run the step in explore mode to regenerate with hash).
     """
     hash_path = Path(str(script_path) + SCRIPT_HASH_SUFFIX)
     if not hash_path.exists():
-        # Backward compatible: scripts saved before hash verification was added
-        return True
+        logger.warning(
+            f"[Security] Replay script has no integrity hash: {script_path}. "
+            f"Re-run this step in explore or auto mode to generate the hash."
+        )
+        return False
 
     content = script_path.read_text(encoding="utf-8")
     expected = hash_path.read_text(encoding="utf-8").strip()
@@ -77,6 +119,7 @@ class AIContext:
             default_mode: ActionMode = "auto",
             execution_id: str = "default",
             max_steps: int = 20,
+            llm=None,
     ):
         self.page = page
         self.case_dir = case_dir
@@ -85,6 +128,7 @@ class AIContext:
         self.default_mode = default_mode
         self.execution_id = execution_id
         self.max_steps = max_steps
+        self._llm = llm
         self.scripts_dir = case_dir / "scripts"
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
         self._last_result: dict | None = None
@@ -185,6 +229,7 @@ class AIContext:
                 execution_id=self.execution_id,
                 case_dir=self.case_dir,
                 max_steps=self.max_steps,
+                llm=self._llm,
             )
             # Try to parse JSON from the result
             import json as _json
@@ -286,21 +331,34 @@ class AIContext:
         return result
 
     async def _replay(self) -> dict:
-        """Execute the saved replay script directly without AI reasoning."""
+        """Execute the saved replay script directly without AI reasoning.
+
+        Validates integrity (SHA256 hash) and structure (AST whitelist) before
+        execution. Uses a restricted builtins namespace to sandbox the script.
+        """
         logger.info(f"[Replay] {self.step_id}: executing {self.script_path}")
 
         if not _verify_script(self.script_path):
             return {
                 "success": False,
-                "summary": f"回放脚本完整性校验失败 — 脚本可能已被篡改。请用 explore 模式重新生成。",
+                "summary": "回放脚本完整性校验失败 — 脚本可能已被篡改。请用 explore 模式重新生成。",
                 "steps": [],
             }
 
         try:
             script_content = self.script_path.read_text(encoding="utf-8")
 
+            # AST validation — block imports, exec, eval, etc.
+            tree = ast.parse(script_content, filename=str(self.script_path))
+            _validate_replay_ast(tree)
+
+            # Restricted builtins — safe subset for replay scripts
+            safe_builtins = {
+                k: v for k, v in __builtins__.items()  # type: ignore[attr-defined]
+                if k not in _FORBIDDEN_BUILTINS
+            }
             exec_globals: dict[str, Any] = {
-                "__builtins__": __builtins__,
+                "__builtins__": safe_builtins,
             }
 
             exec(script_content, exec_globals)
@@ -334,6 +392,7 @@ class AIContext:
             execution_id=self.execution_id,
             case_dir=self.case_dir,
             max_steps=self.max_steps,
+            llm=self._llm,
         )
 
         if result.get("success"):

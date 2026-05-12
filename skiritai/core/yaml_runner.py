@@ -56,7 +56,7 @@ except ImportError:
 def _require_yaml() -> None:
     if yaml is None:
         raise ImportError(
-            "PyYAML is required for YAML cases. Install with: pip install pyyaml"
+            "PyYAML is required for YAML cases. Install with: pip install PyYAML"
         )
 
 
@@ -160,6 +160,7 @@ async def run_yaml_case(
     on_log: OnLogCallback = None,
     execution_id: str | None = None,
     results_dir: Path | None = None,
+    llm=None,
 ) -> dict:
     """Run a YAML-defined test case.
 
@@ -168,6 +169,7 @@ async def run_yaml_case(
         on_log: Optional callback for real-time log streaming.
         execution_id: Execution identifier for events.
         results_dir: Directory for saving results.
+        llm: Optional LLM provider instance. If None, auto-detects from env.
 
     Returns:
         Report dict with case_name, status, steps, etc.
@@ -225,8 +227,11 @@ async def run_yaml_case(
                 break
 
         if step_type is None:
-            logger.warning(f"[YamlRunner] Unknown step definition at index {i}: {step_def}")
-            continue
+            raise ValueError(
+                f"Unknown step type at index {i} (step '{step_name}'): "
+                f"{list(step_def.keys())}. "
+                f"Valid step types: action, verify, screenshot, analyze, page_info"
+            )
 
         await event_bus.publish(Event(
             type="step_started",
@@ -244,6 +249,7 @@ async def run_yaml_case(
             default_mode="auto",
             execution_id=eid,
             max_steps=max_steps,
+            llm=llm,
         )
         if ai is not None:
             new_ai._page_analysis = ai._page_analysis

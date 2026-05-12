@@ -48,11 +48,13 @@ class FlowAI:
         results_dir: Path | None = None,
         max_steps: int = 20,
         on_log: OnLogCallback = None,
+        llm=None,
     ):
         self._session = session
         self._results_dir = results_dir
         self._max_steps = max_steps
         self._on_log = on_log
+        self._llm = llm
         self._ctx = CaseContext(case_dir=results_dir or Path("."), execution_id="flow")
         self._step_counter = 0
         self._results: list[dict] = []
@@ -80,6 +82,7 @@ class FlowAI:
             default_mode="auto",
             execution_id="flow",
             max_steps=self._max_steps,
+            llm=self._llm,
         )
         return self._ai
 
@@ -238,6 +241,7 @@ async def flow(
     results_dir: Path | str | None = None,
     max_steps: int = 20,
     on_log: OnLogCallback = None,
+    llm=None,
 ):
     """Functional test context — no subclass needed.
 
@@ -249,6 +253,7 @@ async def flow(
         results_dir: Directory to save results and reports.
         max_steps: Maximum agent tool-call steps per action.
         on_log: Optional callback for real-time log streaming.
+        llm: Optional LLM provider instance.  If ``None``, auto-detects from env.
 
     Yields:
         :class:`FlowAI` instance.
@@ -261,6 +266,14 @@ async def flow(
             await ai.action("打开百度首页 https://www.baidu.com")
             await ai.screenshot("homepage")
             await ai.verify("页面标题包含'百度'")
+
+    With explicit LLM::
+
+        from skiritai import flow
+        from skiritai.llm import OpenAIProvider
+
+        async with flow(llm=OpenAIProvider(api_key="sk-xxx", model="gpt-5")) as ai:
+            await ai.action("打开百度首页")
     """
     from skiritai.core.agent_loop import register_all_tools
     register_all_tools()
@@ -269,7 +282,7 @@ async def flow(
     session = BrowserSession(headless=headless)
     await session.start()
     logger.info("[Flow] Browser launched")
-    runner = FlowAI(session=session, results_dir=rd, max_steps=max_steps, on_log=on_log)
+    runner = FlowAI(session=session, results_dir=rd, max_steps=max_steps, on_log=on_log, llm=llm)
     try:
         yield runner
     finally:
