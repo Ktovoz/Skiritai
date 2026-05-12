@@ -173,6 +173,23 @@ pip install skiritai[web]
 skiritai serve --host 0.0.0.0 --port 8000
 ```
 
+## Development
+
+```bash
+# Clone and install
+git clone https://github.com/Ktovoz/Skiritai.git
+cd Skiritai
+
+# Install uv (one-time)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Sync dependencies and set up dev environment
+uv sync
+
+# Run tests
+uv run pytest
+```
+
 ## Project Structure
 
 ```
