@@ -81,11 +81,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Install with dev deps
-        run: pip install -e ".[dev]"
+        run: uv pip install --system -e ".[dev]"
 
       - name: Run unit tests
-        run: pytest tests/unit/ -v
+        run: uv run pytest tests/unit/ -v
 
   # ============================================================
   # Build: 构建并检查包
@@ -100,14 +105,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install build tools
-        run: pip install build twine
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
 
       - name: Build package
-        run: python -m build
+        run: uv build
 
       - name: Check package
-        run: twine check dist/*
+        run: uvx twine check dist/*
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -131,7 +136,8 @@ jobs:
           name: dist
           path: dist/
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+        run: uv publish --token ${{ secrets.PYPI_API_TOKEN }}

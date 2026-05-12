@@ -31,20 +31,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Cache pip packages
-        uses: actions/cache@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Install package with dev deps
-        run: |
-          pip install -e ".[dev]"
+        run: uv pip install --system -e ".[dev]"
 
       - name: Run unit tests
-        run: python -m pytest tests/unit/ -v -s --tb=short
+        run: uv run pytest tests/unit/ -v -s --tb=short
 
   # ============================================================
   # Functional + Acceptance: Agent 逻辑 + 脚本级验证
@@ -61,23 +58,20 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Cache pip packages
-        uses: actions/cache@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Install package with dev + web deps
-        run: |
-          pip install -e ".[dev,web]"
+        run: uv pip install --system -e ".[dev,web]"
 
       - name: Run functional tests
-        run: python -m pytest tests/functional/ -v -s --tb=short
+        run: uv run pytest tests/functional/ -v -s --tb=short
 
       - name: Run acceptance tests
-        run: python -m pytest tests/acceptance/ -v -s --tb=short
+        run: uv run pytest tests/acceptance/ -v -s --tb=short
 
   # ============================================================
   # E2E: 真实浏览器测试 (Playwright Chromium headless)
@@ -94,13 +88,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Cache pip packages
-        uses: actions/cache@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -112,13 +104,13 @@ jobs:
 
       - name: Install package with dev + web deps
         run: |
-          pip install -e ".[dev,web]"
+          uv pip install --system -e ".[dev,web]"
           playwright install --with-deps chromium
 
       - name: Run E2E tests
         env:
           HEADLESS: "true"
-        run: python -m pytest tests/e2e/ -v -s --tb=short
+        run: uv run pytest tests/e2e/ -v -s --tb=short
 
   # ============================================================
   # Coverage: 汇总覆盖率报告（在所有测试完成后运行）
@@ -134,17 +126,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Cache pip packages
-        uses: actions/cache@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-3.12-${{ hashFiles('pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-3.12-
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
 
       - name: Install package with dev + web deps
-        run: |
-          pip install -e ".[dev,web]"
+        run: uv pip install --system -e ".[dev,web]"
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -161,7 +150,7 @@ jobs:
         env:
           HEADLESS: "true"
         run: |
-          python -m pytest tests/unit/ tests/functional/ tests/acceptance/ tests/e2e/ \
+          uv run pytest tests/unit/ tests/functional/ tests/acceptance/ tests/e2e/ \
             --cov=skiritai \
             --cov-report=term \
             --cov-report=html \
