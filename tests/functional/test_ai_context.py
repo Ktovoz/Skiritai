@@ -30,6 +30,7 @@ class TestAIContext:
 
     def test_mode_auto_replays_when_script_exists(self):
         from skiritai.core.ai_context import AIContext
+        from skiritai.core.ai_context import _compute_script_hash, SCRIPT_HASH_SUFFIX
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "mycase"
@@ -38,9 +39,11 @@ class TestAIContext:
 
             # Write a valid replay script
             ctx.scripts_dir.mkdir(parents=True, exist_ok=True)
-            ctx.script_path.write_text(
-                "async def run(page, context):\n    pass\n"
-            )
+            script_content = "async def run(page, context):\n    pass\n"
+            ctx.script_path.write_text(script_content)
+            # Write the integrity hash so _verify_script passes
+            hash_path = Path(str(ctx.script_path) + SCRIPT_HASH_SUFFIX)
+            hash_path.write_text(_compute_script_hash(script_content))
 
             result = asyncio.run(ctx.action("do something", mode="auto"))
             assert result["success"] is True
@@ -132,6 +135,7 @@ class TestAIContext:
 
     def test_replay_script_with_error_returns_failure(self):
         from skiritai.core.ai_context import AIContext
+        from skiritai.core.ai_context import _compute_script_hash, SCRIPT_HASH_SUFFIX
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "mycase"
@@ -140,9 +144,11 @@ class TestAIContext:
 
             # Write a script that raises
             ctx.scripts_dir.mkdir(parents=True, exist_ok=True)
-            ctx.script_path.write_text(
-                "async def run(page, context):\n    raise RuntimeError('test error')\n"
-            )
+            script_content = "async def run(page, context):\n    raise RuntimeError('test error')\n"
+            ctx.script_path.write_text(script_content)
+            # Write the integrity hash so _verify_script passes
+            hash_path = Path(str(ctx.script_path) + SCRIPT_HASH_SUFFIX)
+            hash_path.write_text(_compute_script_hash(script_content))
 
             result = asyncio.run(ctx._replay())
             assert result["success"] is False
