@@ -39,18 +39,15 @@ class TestBuildAgent:
     """Test build_agent() creates a valid ReAct agent."""
 
     def test_build_agent_returns_agent(self):
-        from skiritai.llm.registry import _PROVIDERS
         from skiritai.llm.openai_provider import OpenAIProvider
 
-        # Register a mock provider
+        # Create a mock provider
         mock_llm = MagicMock()
         mock_provider = MagicMock(spec=OpenAIProvider)
         mock_provider.build.return_value = mock_llm
         mock_provider.name = "openai"
 
-        _PROVIDERS["mock_test"] = type(mock_provider)
-
-        with patch("skiritai.core.agent_loop.get_provider", return_value=mock_provider):
+        with patch("skiritai.core.agent_loop._module_llm", mock_provider):
             with patch(
                     "skiritai.core.agent_loop.create_react_agent"
             ) as mock_create:
@@ -70,11 +67,7 @@ class TestBuildAgent:
                 assert "click" in tool_names
                 assert "fill" in tool_names
 
-        # Cleanup
-        _PROVIDERS.pop("mock_test", None)
-
     def test_build_agent_includes_perception_tools(self):
-        from skiritai.llm.registry import _PROVIDERS
         from skiritai.llm.openai_provider import OpenAIProvider
 
         # Register tools before building (refactored: tools no longer auto-import)
@@ -84,22 +77,18 @@ class TestBuildAgent:
         mock_llm = MagicMock()
         mock_provider = MagicMock(spec=OpenAIProvider)
         mock_provider.build.return_value = mock_llm
-        _PROVIDERS["mock_test"] = type(mock_provider)
 
-        try:
-            with patch("skiritai.core.agent_loop.get_provider", return_value=mock_provider):
-                with patch(
-                        "skiritai.core.agent_loop.create_react_agent"
-                ) as mock_create:
-                    from skiritai.core.agent_loop import build_agent
-                    build_agent()
+        with patch("skiritai.core.agent_loop._module_llm", mock_provider):
+            with patch(
+                    "skiritai.core.agent_loop.create_react_agent"
+            ) as mock_create:
+                from skiritai.core.agent_loop import build_agent
+                build_agent()
 
-                    call_kwargs = mock_create.call_args.kwargs
-                    tool_names = [t.name for t in call_kwargs["tools"]]
-                    assert "page_perceive" in tool_names
-                    assert "find_element" in tool_names
-        finally:
-            _PROVIDERS.pop("mock_test", None)
+                call_kwargs = mock_create.call_args.kwargs
+                tool_names = [t.name for t in call_kwargs["tools"]]
+                assert "page_perceive" in tool_names
+                assert "find_element" in tool_names
 
 
 # ============================================================

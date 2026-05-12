@@ -227,11 +227,18 @@ async def run_yaml_case(
                 break
 
         if step_type is None:
-            raise ValueError(
-                f"Unknown step type at index {i} (step '{step_name}'): "
-                f"{list(step_def.keys())}. "
+            logger.warning(
+                f"[YamlRunner] Unknown step type at index {i} (step '{step_name}'): "
+                f"{list(step_def.keys())}. Skipping. "
                 f"Valid step types: action, verify, screenshot, analyze, page_info"
             )
+            results.append({
+                "step_id": step_name,
+                "type": "unknown",
+                "status": "skipped",
+                "error": f"Unknown step keys: {list(step_def.keys())}",
+            })
+            continue
 
         await event_bus.publish(Event(
             type="step_started",

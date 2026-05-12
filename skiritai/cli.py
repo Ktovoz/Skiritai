@@ -4,6 +4,9 @@ Usage:
     skiritai run <case_dir>          Run a test case
     skiritai serve [--host] [--port]  Start the web server (requires [web] extra)
     skiritai list [cases_root]        List available test cases
+    skiritai config show              Display current effective LLM config
+    skiritai config check             Verify LLM config by making a test call
+    skiritai config init              Generate a skiritai.toml template
     skiritai browser status [dir]     Check persistent browser session status
     skiritai browser cleanup [dir]    Kill orphan browser and remove session file
 """
@@ -28,6 +31,16 @@ def main():
     run_parser.add_argument("case_dir", type=str, help="Path to case directory containing case.py")
     run_parser.add_argument("--results-dir", type=str, default=None,
                             help="Directory to save test results (default: <case_dir>/test_results)")
+    run_parser.add_argument("--env-file", type=str, default=None,
+                            help="Path to .env file to load before running")
+    run_parser.add_argument("--config", type=str, default=None,
+                            help="Path to skiritai.toml or skiritai.yaml config file")
+    run_parser.add_argument("--llm", type=str, default=None,
+                            help="LLM provider name (openai, anthropic)")
+    run_parser.add_argument("--api-key", type=str, default=None,
+                            help="LLM API key")
+    run_parser.add_argument("--model", type=str, default=None,
+                            help="LLM model name")
 
     # --- serve ---
     serve_parser = subparsers.add_parser("serve", help="Start the web server (requires [web] extra)")
@@ -41,6 +54,13 @@ def main():
     list_parser = subparsers.add_parser("list", help="List available test cases")
     list_parser.add_argument("cases_root", type=str, nargs="?", default="examples",
                              help="Root directory containing case folders (default: examples)")
+
+    # --- config ---
+    config_parser = subparsers.add_parser("config", help="LLM configuration diagnostics")
+    config_sub = config_parser.add_subparsers(dest="config_command", help="Config commands")
+    config_sub.add_parser("show", help="Display current effective LLM configuration")
+    config_sub.add_parser("check", help="Verify LLM config by making a test call")
+    config_sub.add_parser("init", help="Generate a skiritai.toml template in current directory")
 
     # --- browser ---
     browser_parser = subparsers.add_parser("browser", help="Manage persistent browser sessions")
@@ -64,6 +84,8 @@ def main():
         _cmd_serve(args)
     elif args.command == "list":
         _cmd_list(args)
+    elif args.command == "config":
+        _cmd_config(args)
     elif args.command == "browser":
         _cmd_browser(args)
 
@@ -74,8 +96,21 @@ def _cmd_run(args):
     Detection priority when both case.py and case.yaml exist: Python wins.
     Use ``run_yaml_case()`` in Python code to explicitly run a YAML case.
     """
-    from dotenv import load_dotenv
-    load_dotenv()
+    from skiritai.llm._factory import load_env, create_llm
+
+    # 1. Load .env if specified
+    if getattr(args, "env_file", None):
+        load_env(args.env_file)
+
+    # 2. Create provider from CLI args if any LLM-related args given
+    llm = None
+    if getattr(args, "llm", None) or getattr(args, "api_key", None) or getattr(args, "model", None) or getattr(args, "config", None):
+        llm = create_llm(
+            provider=getattr(args, "llm", None),
+            api_key=getattr(args, "api_key", None),
+            model=getattr(args, "model", None),
+            from_file=getattr(args, "config", None),
+        )
 
     from skiritai.core.agent_loop import register_all_tools
     register_all_tools()
@@ -94,10 +129,10 @@ def _cmd_run(args):
 
     if has_yaml and not has_py:
         from skiritai.core.yaml_runner import run_yaml_case
-        report = asyncio.run(run_yaml_case(case_dir, results_dir=results_dir))
+        report = asyncio.run(run_yaml_case(case_dir, results_dir=results_dir, llm=llm))
     else:
         from skiritai.core.runner import run_case
-        report = asyncio.run(run_case(case_dir, results_dir=results_dir))
+        report = asyncio.run(run_case(case_dir, results_dir=results_dir, llm=llm))
 
     # Print report
     print(f"\n{'=' * 60}")
@@ -171,6 +206,105 @@ def _cmd_list(args):
         else:
             print(f"    Steps: (none)")
         print()
+
+
+def _cmd_config(args):
+    """Handle config subcommand (show / check / init)."""
+    if not getattr(args, "config_command", None):
+        print("Usage: skiritai config {show|check|init}")
+        sys.exit(1)
+
+    if args.config_command == "show":
+        _config_show()
+    elif args.config_command == "check":
+        _config_check()
+    elif args.config_command == "init":
+        _config_init()
+
+
+def _config_show():
+    """Display current effective LLM configuration."""
+    from skiritai.llm._factory import create_llm, _load_config_file, _discover_config_file
+
+    # Try to load config without building a provider
+    import os
+    from skiritai.llm._config import LLMConfig
+
+    cfg = LLMConfig()
+    cfg.provider = os.getenv("LLM_PROVIDER")
+    cfg.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    cfg.base_url = os.getenv("OPENAI_BASE_URL")
+    cfg.model = os.getenv("LLM_MODEL")
+
+    file_cfg = _load_config_file(None)
+    if file_cfg:
+        for field in ("provider", "api_key", "base_url", "model", "temperature", "max_tokens"):
+            val = getattr(file_cfg, field)
+            if val is not None:
+                setattr(cfg, field, val)
+
+    config_file = _discover_config_file()
+
+    print("Effective LLM Configuration:")
+    print(f"  Config file: {config_file or '(none)'}")
+    print(f"  Provider:    {cfg.provider or '(auto-detect)'}")
+    print(f"  API key:     {_mask_key(cfg.api_key)}")
+    print(f"  Base URL:    {cfg.base_url or '(default)'}")
+    print(f"  Model:       {cfg.model or '(default)'}")
+    print(f"  Temperature: {cfg.temperature or '(default)'}")
+    print(f"  Max tokens:  {cfg.max_tokens or '(default)'}")
+
+
+def _config_check():
+    """Verify LLM config by attempting to create and build a provider."""
+    from skiritai.llm._factory import create_llm
+
+    try:
+        provider = create_llm()
+        print(f"Provider: {provider.name}")
+        print("Configuration is valid.")
+    except Exception as e:
+        print(f"Configuration error: {e}")
+        sys.exit(1)
+
+
+def _config_init():
+    """Generate a skiritai.toml template in current directory."""
+    target = Path.cwd() / "skiritai.toml"
+    if target.exists():
+        print(f"skiritai.toml already exists in {Path.cwd()}")
+        sys.exit(1)
+
+    template = """\
+[llm]
+# LLM provider: "openai" or "anthropic" (omit for auto-detect)
+# provider = "openai"
+
+# API key (supports ${VAR} env var references)
+# api_key = "${OPENAI_API_KEY}"
+
+# Custom API base URL (optional, for proxy/custom endpoints)
+# base_url = "https://api.openai.com/v1"
+
+# Model name (omit for provider default)
+# model = "gpt-4o"
+
+# Generation parameters (optional)
+# temperature = 0.2
+# max_tokens = 4096
+"""
+    target.write_text(template, encoding="utf-8")
+    print(f"Created {target}")
+    print("Edit the file to configure your LLM provider.")
+
+
+def _mask_key(key: str | None) -> str:
+    """Mask an API key for display, showing first 4 and last 4 chars."""
+    if not key:
+        return "(not set)"
+    if len(key) <= 12:
+        return "****"
+    return f"{key[:4]}...{key[-4:]}"
 
 
 def _cmd_browser(args):

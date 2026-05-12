@@ -348,7 +348,9 @@ steps:
 
                     report = await run_yaml_case(case_dir)
 
-        assert len(report["steps"]) == 1
+        assert len(report["steps"]) == 2
+        assert report["steps"][0]["status"] == "skipped"
+        assert report["steps"][1]["status"] == "success"
 
     async def test_browser_lifecycle_called(self, tmp_path: Path):
         from skiritai.core.yaml_runner import run_yaml_case

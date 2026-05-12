@@ -103,6 +103,22 @@ def register_all_tools() -> None:
 _env_loaded: bool = False
 _tools_registered: bool = False
 
+# Module-level LLM provider override (set via set_llm())
+_module_llm: Any = None
+
+
+def set_llm(llm: Any) -> None:
+    """Set a module-level LLM provider override.
+
+    Once set, all subsequent ``_build_llm()`` calls will use this provider
+    instead of auto-detecting from environment variables.
+
+    Args:
+        llm: An LLMProvider instance.
+    """
+    global _module_llm
+    _module_llm = llm
+
 
 def _ensure_env() -> None:
     """Load .env once per process. Safe to call multiple times."""
@@ -124,16 +140,17 @@ def _ensure_tools() -> None:
 def _build_llm(llm=None):
     """Build and return an LLM instance.
 
-    If *llm* is provided (an :class:`LLMProvider` instance), use it directly.
-    Otherwise auto-detects from environment variables.
+    Priority: explicit *llm* arg > module-level override > create_llm() auto.
 
     Automatically loads .env on first call.
     """
     _ensure_env()
     if llm is not None:
         return llm.build()
-    provider = get_provider()
-    return provider.build()
+    if _module_llm is not None:
+        return _module_llm.build()
+    from skiritai.llm._factory import create_llm
+    return create_llm().build()
 
 
 def build_agent(system_prompt: str | None = None, llm=None):
