@@ -50,15 +50,6 @@ web = [
 anthropic = [
     "langchain-anthropic>=0.3.0",
 ]
-dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.24",
-    "httpx>=0.27",
-    "pytest-cov",
-    "build",
-    "twine",
-]
-
 [dependency-groups]
 dev = [
     "pytest>=8.0",
@@ -74,6 +65,7 @@ skiritai = "skiritai.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["skiritai"]
+artifacts = ["skiritai/py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

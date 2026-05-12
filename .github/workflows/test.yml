@@ -35,10 +35,10 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install package with dev deps
-        run: uv pip install --system -e ".[dev]"
+        run: uv sync --python ${{ matrix.python-version }}
 
       - name: Run unit tests
         run: uv run pytest tests/unit/ -v -s --tb=short
@@ -62,10 +62,10 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install package with dev + web deps
-        run: uv pip install --system -e ".[dev,web]"
+        run: uv sync --extra web --python ${{ matrix.python-version }}
 
       - name: Run functional tests
         run: uv run pytest tests/functional/ -v -s --tb=short
@@ -92,7 +92,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
+          cache-dependency-glob: "uv.lock"
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -104,8 +104,8 @@ jobs:
 
       - name: Install package with dev + web deps
         run: |
-          uv pip install --system -e ".[dev,web]"
-          playwright install --with-deps chromium
+          uv sync --extra web --python ${{ matrix.python-version }}
+          uv run playwright install --with-deps chromium
 
       - name: Run E2E tests
         env:
@@ -130,10 +130,10 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
+          cache-dependency-glob: "uv.lock"
 
       - name: Install package with dev + web deps
-        run: uv pip install --system -e ".[dev,web]"
+        run: uv sync --extra web --python "3.12"
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -144,7 +144,7 @@ jobs:
             ${{ runner.os }}-playwright-
 
       - name: Install Playwright browsers
-        run: playwright install --with-deps chromium
+        run: uv run playwright install --with-deps chromium
 
       - name: Run all tests with coverage
         env:

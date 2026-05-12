@@ -85,9 +85,10 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Install with dev deps
-        run: uv pip install --system -e ".[dev]"
+        run: uv sync --python "3.12"
 
       - name: Run unit tests
         run: uv run pytest tests/unit/ -v
@@ -107,6 +108,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Build package
         run: uv build
@@ -138,6 +141,10 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Publish to PyPI
-        run: uv publish --token ${{ secrets.PYPI_API_TOKEN }}
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: uv publish

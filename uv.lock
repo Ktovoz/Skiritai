@@ -5922,14 +5922,6 @@ dependencies = [
 anthropic = [
     { name = "langchain-anthropic" },
 ]
-dev = [
-    { name = "build" },
-    { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "twine" },
-]
 web = [
     { name = "fastapi" },
     { name = "pydantic" },
@@ -5950,9 +5942,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "browser-use", specifier = ">=0.12.0" },
-    { name = "build", marker = "extra == 'dev'" },
     { name = "fastapi", marker = "extra == 'web'", specifier = ">=0.115.0" },
-    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "langchain-anthropic", marker = "extra == 'anthropic'", specifier = ">=0.3.0" },
     { name = "langchain-core", specifier = ">=0.3.0" },
     { name = "langchain-openai", specifier = ">=0.3.0" },
@@ -5960,15 +5950,11 @@ requires-dist = [
     { name = "loguru" },
     { name = "playwright", specifier = ">=1.40.0" },
     { name = "pydantic", marker = "extra == 'web'", specifier = ">=2.0.0" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "python-dotenv" },
-    { name = "twine", marker = "extra == 'dev'" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'web'", specifier = ">=0.34.0" },
     { name = "websockets", marker = "extra == 'web'" },
 ]
-provides-extras = ["web", "anthropic", "dev"]
+provides-extras = ["web", "anthropic"]
 
 [package.metadata.requires-dev]
 dev = [
