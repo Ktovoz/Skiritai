@@ -203,7 +203,7 @@ class BaseCase:
     # results directory.  Set to True to keep disk usage low in CI pipelines.
     cleanup_temp_screenshots: bool = False
 
-    def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None):
+    def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None, llm=None):
         self._case_dir = case_dir or Path(inspect.getfile(self.__class__)).parent
         self._execution_id = execution_id or "default"
         self._results_dir = results_dir
@@ -216,6 +216,11 @@ class BaseCase:
 
         # Per-case headless override: None = use env var, True/False = explicit
         self.headless: bool | None = None
+
+        # LLM provider override: if given, inject into agent_loop
+        if llm is not None:
+            from skiritai.core.agent_loop import set_llm
+            set_llm(llm)
 
         # Global context — state machine + store + browser session info
         self._ctx = CaseContext(
