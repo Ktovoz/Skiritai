@@ -290,6 +290,7 @@ async def run_yaml_case(
         for attempt in range(attempt_limit):
             if attempt > 0:
                 logger.info(f"[YamlRunner] Retrying {step_name} (attempt {attempt + 1}/{attempt_limit})")
+            ai._step_started_at = time.time()  # reset per attempt
 
             try:
                 executor = _STEP_EXECUTORS.get(step_type)
@@ -347,9 +348,16 @@ async def run_yaml_case(
     await session.stop()
     logger.info("[YamlRunner] Browser closed")
 
-    total = len(steps)
+    total = len(results)
     failed = total - success_count
     status = "completed" if failed == 0 else "failed"
+
+    # Warn if step_filter excluded all steps
+    if step_filter and total == 0:
+        logger.warning(
+            f"[YamlRunner] No steps matched filter {step_filter}. "
+            f"Available steps: {[s.get('name', f'step_{i+1}') for i, s in enumerate(steps)]}"
+        )
 
     from skiritai.core.report_builder import normalize_report
 
@@ -375,9 +383,10 @@ async def run_yaml_case(
         data={"report": report},
     ))
 
-    # Send notification hooks
+    # Fire-and-forget notification (non-blocking, best-effort)
+    import asyncio as _asyncio
     from skiritai.core.notify import notify_if_configured
-    await notify_if_configured(report)
+    _asyncio.create_task(notify_if_configured(report))
 
     return report
 

@@ -29,11 +29,19 @@ _ALLOWED_AST_NODES = frozenset({
     ast.ExceptHandler, ast.With, ast.withitem, ast.Compare, ast.BoolOp,
     ast.BinOp, ast.UnaryOp, ast.IfExp, ast.Dict, ast.List, ast.Tuple,
     ast.Set, ast.Subscript, ast.Slice, ast.Starred, ast.JoinedStr,
-    ast.FormattedValue, ast.Await, ast.Attribute, ast.Global, ast.Nonlocal,
+    ast.FormattedValue, ast.Await, ast.Global, ast.Nonlocal,
 })
 _FORBIDDEN_BUILTINS = frozenset({
     "exec", "eval", "compile", "__import__", "open", "input",
     "breakpoint", "memoryview", "help",
+    # Prevent sandbox bypass via getattr(__builtins__, ...) etc.
+    "getattr", "setattr", "delattr",
+})
+# Attribute names that must not be accessed (prevents object introspection escapes)
+_FORBIDDEN_ATTRS = frozenset({
+    "__builtins__", "__class__", "__bases__", "__subclasses__",
+    "__mro__", "__globals__", "__code__", "__func__", "__self__",
+    "__dict__", "__module__",
 })
 
 
@@ -54,6 +62,13 @@ def _validate_replay_ast(tree: ast.AST) -> None:
             if isinstance(node.func, ast.Name) and node.func.id in _FORBIDDEN_BUILTINS:
                 raise ValueError(
                     f"Forbidden builtin function '{node.func.id}' in replay script"
+                )
+        # Block attribute access to dangerous dunder attrs:
+        #   __builtins__.__class__.__subclasses__() etc.
+        if isinstance(node, ast.Attribute):
+            if isinstance(node.attr, str) and node.attr in _FORBIDDEN_ATTRS:
+                raise ValueError(
+                    f"Forbidden attribute access: '.{node.attr}' in replay script"
                 )
 
 
@@ -401,8 +416,11 @@ class AIContext:
             _validate_replay_ast(tree)
 
             # Restricted builtins — safe subset for replay scripts
+            # __builtins__ is a module under normal import, but a dict in __main__.
+            # Use the builtins module for a stable interface.
+            import builtins as _builtins_mod
             safe_builtins = {
-                k: v for k, v in __builtins__.items()  # type: ignore[attr-defined]
+                k: v for k, v in vars(_builtins_mod).items()
                 if k not in _FORBIDDEN_BUILTINS
             }
             exec_globals: dict[str, Any] = {

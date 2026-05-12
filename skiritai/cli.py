@@ -37,8 +37,6 @@ def main():
                             help="Path to skiritai.toml or skiritai.yaml config file")
     run_parser.add_argument("--llm", type=str, default=None,
                             help="LLM provider name (openai, anthropic)")
-    run_parser.add_argument("--api-key", type=str, default=None,
-                            help="LLM API key")
     run_parser.add_argument("--model", type=str, default=None,
                             help="LLM model name")
     run_parser.add_argument("--steps", type=str, default=None,
@@ -111,14 +109,12 @@ def _cmd_run(args):
     llm = None
     has_llm_args = (
         getattr(args, "llm", None)
-        or getattr(args, "api_key", None)
         or getattr(args, "model", None)
         or getattr(args, "config", None)
     )
     if has_llm_args:
         llm = create_llm(
             provider=getattr(args, "llm", None),
-            api_key=getattr(args, "api_key", None),
             model=getattr(args, "model", None),
             from_file=getattr(args, "config", None),
         )

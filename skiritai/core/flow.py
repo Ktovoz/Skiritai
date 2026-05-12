@@ -251,15 +251,24 @@ class FlowAI:
 
         from skiritai.core.report_builder import normalize_report
 
-        # Attach screenshots to their step entries by matching step_id prefix
+        # Standalone screenshot() calls get their own step entries.
+        # Screenshots captured during action/verify are already embedded
+        # in the step entry — skip duplicate matching.
+        seen_ss = set()
         for entry in self._results:
-            step_id = entry["step_id"]
-            entry.setdefault("screenshots", [])
-            for ss in self._screenshots:
-                # Screenshot step_ids: ss_1, ss_2 → match step_1, step_2 etc.
-                ss_prefix = ss.get("step_id", "")
-                if ss_prefix and step_id.startswith(ss_prefix.replace("ss_", "")):
-                    entry["screenshots"].append(ss)
+            for s in entry.get("screenshots", []):
+                seen_ss.add(s.get("path", ""))
+
+        for ss in self._screenshots:
+            if ss.get("path") in seen_ss:
+                continue
+            self._results.append({
+                "step_id": ss.get("step_id", "screenshot"),
+                "status": "success",
+                "type": "screenshot",
+                "screenshots": [ss],
+                "elapsed": 0,
+            })
 
         raw = {
             "case_name": "flow",

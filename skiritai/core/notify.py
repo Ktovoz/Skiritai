@@ -112,7 +112,9 @@ async def send_webhook(report: dict) -> bool:
         import asyncio
         loop = asyncio.get_running_loop()
         status_code = await loop.run_in_executor(None, _post)
-        logger.info(f"[Notify] Webhook sent to {url[:60]}... → HTTP {status_code}")
+        # Log only the host — full URL may contain secret tokens in path
+        host = url.split("/")[2] if "//" in url else url[:30]
+        logger.info(f"[Notify] Webhook sent to {host} → HTTP {status_code}")
         return True
     except Exception as e:
         # Notifications are non-critical — don't fail the test

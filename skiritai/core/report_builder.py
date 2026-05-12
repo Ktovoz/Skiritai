@@ -75,14 +75,12 @@ def normalize_report(report: dict, *, source: str = "python") -> dict:
         }
     """
     steps = report.get("steps", [])
-    # Determine default type: if source="yaml" steps already have type;
-    # Python/BaseCase steps are always "action".
-    default_type = "action"
+    # BaseCase steps default to "action"; YAML/Flow steps carry their own type.
 
     normalized_steps = []
     for step in steps:
-        default_type = step.get("type", "action")
-        normalized_steps.append(normalize_step(step, default_type=default_type))
+        step_default_type = step.get("type", "action")
+        normalized_steps.append(normalize_step(step, default_type=step_default_type))
 
     report_source = report.get("source", source)
 

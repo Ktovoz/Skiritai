@@ -767,9 +767,10 @@ class BaseCase:
             data={"report": report},
         ))
 
-        # Send notification hooks (webhook, etc.)
+        # Fire-and-forget notification (non-blocking, best-effort)
+        import asyncio as _asyncio
         from skiritai.core.notify import notify_if_configured
-        await notify_if_configured(report)
+        _asyncio.create_task(notify_if_configured(report))
 
         return report
 
@@ -801,32 +802,14 @@ class BaseCase:
 
     # ---- Report rendering ----
 
-    # Cached HTML template (loaded once per process lifetime)
-    _template_html: str | None = None
-
-    @classmethod
-    def _load_template(cls) -> str | None:
-        """Load the Vue + Ant Design report template, cached in memory."""
-        if cls._template_html is not None:
-            return cls._template_html
-
-        template_paths = [
-            Path(__file__).parent.parent.parent / "report" / "dist" / "index.html",
-            Path(__file__).parent / "templates" / "report.html",
-        ]
-        for tp in template_paths:
-            if tp.exists():
-                cls._template_html = tp.read_text(encoding="utf-8")
-                return cls._template_html
-        return None
-
     @staticmethod
     def _render_html(report: dict) -> str:
         """Render the report using the Vue + Ant Design SPA template."""
         import base64
         import json
 
-        template_html = BaseCase._load_template()
+        from skiritai.core._session import _load_template
+        template_html = _load_template()
 
         if template_html is None:
             return f"<html><body><pre>{json.dumps(report, ensure_ascii=False, indent=2)}</pre></body></html>"
