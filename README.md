@@ -44,6 +44,8 @@ Replay Mode (Execute the proven path)
 |---------------------------|-------------------------------------------------------------------------------------------|
 | **Explore → Replay Loop** | AI explores and generates scripts on first run; replays them instantly on subsequent runs |
 | **30x Performance**       | Replay mode skips AI inference entirely — 74s → 2.5s                                      |
+| **Flow API**               | Functional, no-subclass API — `async with flow() as ai:`                                  |
+| **YAML Cases**             | Define test steps in YAML, run via CLI or `run_yaml_case()`                              |
 | **Python-native Cases**   | Define test cases as Python classes with decorators                                       |
 | **Auto-Solidification**   | Successful explorations are automatically saved as replayable scripts                     |
 | **Multi-level Fallback**  | `fill` → `click_force` → `eval_js` for resilient element interaction                      |
@@ -93,6 +95,37 @@ Total: 74s
 [Step] verify      (replay)   → 0.8s → direct execution       ✓
 Total: 2.5s
 ```
+
+### Flow API (Functional, No Subclass)
+
+```python
+from skiritai import flow
+
+async with flow() as ai:
+    await ai.action("Navigate to https://example.com")
+    await ai.screenshot("homepage")
+    await ai.verify("Page title contains 'Example'")
+```
+
+`flow()` is a functional context manager — no subclass, no decorators. Just `ai.action()`, `ai.verify()`, `ai.screenshot()`, `ai.analyze_page()`, and `ai.get_page_info()`.
+
+### YAML Cases (No Code)
+
+```yaml
+# case.yaml
+name: Search Test
+steps:
+  - action: Open https://www.baidu.com
+  - action: Search for "Playwright"
+  - verify: Search results are displayed
+  - screenshot: result
+```
+
+```bash
+skiritai run examples/baidu_yaml
+```
+
+YAML cases are perfect for QA teams who want AI-driven testing without writing Python. Supports `action`, `verify`, `screenshot`, `analyze`, `page_info` steps, with per-step `on_failure: skip | abort` policies.
 
 ## Quick Start
 
@@ -149,6 +182,8 @@ skiritai/
 │   ├── ai_context.py          # Explore/Replay execution context
 │   ├── base_case.py           # Test case base class
 │   ├── runner.py              # Case discovery and execution
+│   ├── flow.py                # Functional no-subclass API
+│   ├── yaml_runner.py         # YAML case loader and runner
 │   ├── tools.py               # Playwright tool set (14 tools)
 │   ├── browser.py             # Browser lifecycle management
 │   └── ...
@@ -188,6 +223,13 @@ tests/                         # Framework tests
 
 Examples are organized into three tiers:
 
+### New Ways to Write Tests (no BaseCase needed)
+
+| Example | Description |
+|---|---|
+| `flow_demo/` | Functional Flow API — `async with flow() as ai:` style, no subclass |
+| `baidu_yaml/` | YAML-defined test case — write tests entirely in YAML |
+
 ### Teaching (learn framework features)
 
 | Example | What It Teaches |
@@ -211,6 +253,12 @@ Examples are organized into three tiers:
 | `ktovoz_blog/` | 11-step blog test: homepage, articles, tags, about, footer, search, summary. Demonstrates the framework's capability for complex multi-step scenarios. |
 
 ```bash
+# Flow API — functional style, no subclass
+python examples/flow_demo/demo.py
+
+# YAML case — no Python code at all
+skiritai run examples/baidu_yaml
+
 # Start with a teaching example (no AI needed)
 skiritai run examples/tutorial/minimal
 

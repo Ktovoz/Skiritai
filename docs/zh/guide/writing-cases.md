@@ -2,6 +2,11 @@
 
 测试用例是继承 `BaseCase` 的 Python 类。每个步骤是用 `@step` 装饰的 `async` 方法。
 
+::: tip 其他编写方式
+- **[Flow API](/zh/guide/flow-api)** — 函数式风格，`async with flow() as ai:`，无需继承。
+- **[YAML 用例](/zh/guide/yaml-cases)** — 用 YAML 定义测试步骤，无需编写 Python 代码。
+:::
+
 ## 基本结构
 
 ```python

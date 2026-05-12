@@ -9,6 +9,8 @@ skiritai run <case_dir>
 skiritai run . --case my_test.py
 ```
 
+Works with Python `BaseCase` classes and [YAML cases](/guide/yaml-cases) (`case.yaml`). The runner auto-detects the case type.
+
 Options:
 
 - `--case` — Run a specific case file
