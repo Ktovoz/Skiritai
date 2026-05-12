@@ -32,6 +32,22 @@ from skiritai.events import Event, event_bus
 from skiritai.logger import logger
 
 
+def _schedule_notify(report: dict) -> None:
+    """Fire-and-forget notification — non-blocking, best-effort."""
+    import asyncio
+    from skiritai.core.notify import notify_if_configured
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(notify_if_configured(report))
+    except RuntimeError:
+        # No running event loop — run synchronously
+        try:
+            asyncio.run(notify_if_configured(report))
+        except Exception:
+            pass
+
+
 class FlowAI:
     """Standalone AI context that manages its own browser lifecycle.
 
@@ -88,20 +104,19 @@ class FlowAI:
 
     def _advance_ai(self, step_id: str) -> AIContext:
         """Create a new AIContext for a new step, carrying over perception cache."""
-        old = self._ai
-        ai = AIContext(
-            page=self._session.page,
-            case_dir=self._results_dir or Path("."),
-            step_id=step_id,
-            on_log=self._on_log,
-            default_mode="auto",
-            execution_id="flow",
-            max_steps=self._max_steps,
-        )
-        # Carry over cached perception data from previous context
-        if old is not None:
-            ai._page_analysis = old._page_analysis
-            ai._page_info = old._page_info
+        if self._ai is not None:
+            ai = self._ai.copy_for_step(step_id)
+        else:
+            ai = AIContext(
+                page=self._session.page,
+                case_dir=self._results_dir or Path("."),
+                step_id=step_id,
+                on_log=self._on_log,
+                default_mode="auto",
+                execution_id="flow",
+                max_steps=self._max_steps,
+                llm=self._llm,
+            )
         self._ai = ai
         return ai
 
@@ -138,8 +153,11 @@ class FlowAI:
             "summary": result.get("summary", ""),
             "elapsed": round(ai._step_elapsed, 2),
             "type": "action",
+            "screenshots": [{"name": s["name"], "path": s["path"], "step_id": step_id}
+                            for s in ai._screenshots],
         }
         self._results.append(entry)
+        self._screenshots.extend(entry["screenshots"])
 
         status = "success" if result.get("success") else "failed"
         await event_bus.publish(Event(
@@ -169,6 +187,13 @@ class FlowAI:
         result = await ai.verify(assertion, take_screenshot=take_screenshot)
         ai._step_elapsed = time.time() - ai._step_started_at
 
+        # Track failure screenshot
+        screenshots = []
+        if not result.get("passed") and result.get("screenshot"):
+            ss_info = {"name": f"verify_fail_{step_id}", "path": result["screenshot"], "step_id": step_id}
+            screenshots.append(ss_info)
+            self._screenshots.append(ss_info)
+
         entry = {
             "step_id": step_id,
             "status": "passed" if result.get("passed") else "failed",
@@ -176,6 +201,7 @@ class FlowAI:
             "assertion": assertion,
             "reason": result.get("reason", ""),
             "elapsed": round(ai._step_elapsed, 2),
+            "screenshots": screenshots,
         }
         self._results.append(entry)
         self._ctx.current_step = None
@@ -194,7 +220,7 @@ class FlowAI:
         ai = self._ensure_ai(step_id)
         ai._step_started_at = time.time()
         path = await ai.screenshot(name)
-        self._screenshots.append({"name": name, "path": path})
+        self._screenshots.append({"name": name, "path": path, "step_id": step_id, "timestamp": ai._step_started_at})
         return path
 
     async def analyze_page(self) -> dict:
@@ -223,16 +249,33 @@ class FlowAI:
         if not self._results_dir or not self._results:
             return
 
-        report = {
+        from skiritai.core.report_builder import normalize_report
+
+        # Attach screenshots to their step entries by matching step_id prefix
+        for entry in self._results:
+            step_id = entry["step_id"]
+            entry.setdefault("screenshots", [])
+            for ss in self._screenshots:
+                # Screenshot step_ids: ss_1, ss_2 → match step_1, step_2 etc.
+                ss_prefix = ss.get("step_id", "")
+                if ss_prefix and step_id.startswith(ss_prefix.replace("ss_", "")):
+                    entry["screenshots"].append(ss)
+
+        raw = {
             "case_name": "flow",
             "status": "completed" if all(r["status"] in ("success", "passed") for r in self._results) else "failed",
+            "source": "flow",
             "total_steps": len(self._results),
             "success_count": sum(1 for r in self._results if r["status"] in ("success", "passed")),
             "failed_count": sum(1 for r in self._results if r["status"] == "failed"),
             "steps": self._results,
             "elapsed_seconds": round(time.time() - self._session.started_at, 2),
         }
+        report = normalize_report(raw)
         save_report(report, self._results_dir, label="Flow")
+
+        # Fire-and-forget notification (non-blocking, best-effort)
+        _schedule_notify(report)
 
 
 @asynccontextmanager

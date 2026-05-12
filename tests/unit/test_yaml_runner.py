@@ -116,32 +116,41 @@ class TestStepFailurePolicy:
 
     def test_default_is_abort(self):
         from skiritai.core.yaml_runner import _step_failure_policy
-        assert _step_failure_policy({}) == "abort"
+        assert _step_failure_policy({}) == ("abort", 0)
 
     def test_explicit_abort(self):
         from skiritai.core.yaml_runner import _step_failure_policy
-        assert _step_failure_policy({"on_failure": "abort"}) == "abort"
+        assert _step_failure_policy({"on_failure": "abort"}) == ("abort", 0)
 
     def test_explicit_skip(self):
         from skiritai.core.yaml_runner import _step_failure_policy
-        assert _step_failure_policy({"on_failure": "skip"}) == "skip"
+        assert _step_failure_policy({"on_failure": "skip"}) == ("skip", 0)
+
+    def test_explicit_retry(self):
+        from skiritai.core.yaml_runner import _step_failure_policy
+        assert _step_failure_policy({"on_failure": "retry"}) == ("retry", 1)
+
+    def test_retry_with_max_retries(self):
+        from skiritai.core.yaml_runner import _step_failure_policy
+        assert _step_failure_policy({"on_failure": "retry", "max_retries": 3}) == ("retry", 3)
 
     def test_case_insensitive(self):
         from skiritai.core.yaml_runner import _step_failure_policy
-        assert _step_failure_policy({"on_failure": "SKIP"}) == "skip"
-        assert _step_failure_policy({"on_failure": "Abort"}) == "abort"
+        assert _step_failure_policy({"on_failure": "SKIP"}) == ("skip", 0)
+        assert _step_failure_policy({"on_failure": "Abort"}) == ("abort", 0)
+        assert _step_failure_policy({"on_failure": "RETRY"}) == ("retry", 1)
 
     def test_invalid_value_defaults_to_abort(self):
         from skiritai.core.yaml_runner import _step_failure_policy
-        assert _step_failure_policy({"on_failure": "continue"}) == "abort"
+        assert _step_failure_policy({"on_failure": "continue"}) == ("abort", 0)
 
     def test_non_string_defaults_to_abort(self):
         from skiritai.core.yaml_runner import _step_failure_policy
-        assert _step_failure_policy({"on_failure": 42}) == "abort"
+        assert _step_failure_policy({"on_failure": 42}) == ("abort", 0)
 
     def test_none_defaults_to_abort(self):
         from skiritai.core.yaml_runner import _step_failure_policy
-        assert _step_failure_policy({"on_failure": None}) == "abort"
+        assert _step_failure_policy({"on_failure": None}) == ("abort", 0)
 
 
 # ============================================================

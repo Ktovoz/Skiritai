@@ -150,6 +150,8 @@ class TestRunYamlCase:
         mock_ai._step_elapsed = 0.5
         mock_ai._page_analysis = None
         mock_ai._page_info = None
+        mock_ai.step_id = "mock_step"
+        mock_ai.copy_for_step = MagicMock(return_value=mock_ai)
         return mock_ai
 
     async def test_simple_two_step_case(self, tmp_path: Path):

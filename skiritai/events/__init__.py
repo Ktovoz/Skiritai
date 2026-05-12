@@ -189,17 +189,30 @@ class EventBus:
             self._history[eid] = buf[-self._history_size:]
 
     def _persist_event(self, event: Event) -> None:
-        """Append event to JSONL file (best-effort, fire-and-forget)."""
+        """Append event to JSONL file (best-effort, fire-and-forget).
+
+        Uses a thread-pool executor to avoid blocking the async event loop.
+        """
         if self._persist_dir is None:
             return
 
+        import asyncio
+
+        def _write():
+            try:
+                path = self._persist_dir / f"{event.execution_id}.jsonl"
+                line = json.dumps(event.to_dict(), ensure_ascii=False, default=str)
+                with open(path, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+            except Exception as e:
+                logger.debug(f"[EventBus] Persist failed: {e}")
+
         try:
-            path = self._persist_dir / f"{event.execution_id}.jsonl"
-            line = json.dumps(event.to_dict(), ensure_ascii=False, default=str)
-            with open(path, "a", encoding="utf-8") as f:
-                f.write(line + "\n")
-        except Exception as e:
-            logger.debug(f"[EventBus] Persist failed: {e}")
+            loop = asyncio.get_running_loop()
+            loop.run_in_executor(None, _write)
+        except RuntimeError:
+            # No running event loop — write synchronously (startup/shutdown)
+            _write()
 
 
 # Module-level singleton

@@ -27,7 +27,8 @@ Supported step types:
     - ``page_info``: Get page title, URL, text summary
 
 Step-level options (per step dict):
-    - ``on_failure``: ``abort`` (default) | ``skip`` — controls what happens when the step fails
+    - ``on_failure``: ``abort`` (default) | ``skip`` | ``retry`` — controls what happens when the step fails
+    - ``max_retries``: Number of retries when ``on_failure: retry`` (default: 1)
 
 Optional YAML fields:
     - ``name``:       Case display name (default: directory name)
@@ -97,12 +98,19 @@ def load_yaml_case(case_dir: Path) -> dict:
 
 # ---- Failure policy for YAML steps ----
 
-def _step_failure_policy(step_def: dict) -> str:
-    """Return the failure policy for a YAML step: "abort" or "skip"."""
+def _step_failure_policy(step_def: dict) -> tuple[str, int]:
+    """Return the failure policy and max retries for a YAML step.
+
+    Returns:
+        (policy, max_retries) tuple.  policy is one of "abort", "skip", "retry".
+    """
     raw = step_def.get("on_failure", "abort")
-    if isinstance(raw, str) and raw.lower() in ("abort", "skip"):
-        return raw.lower()
-    return "abort"
+    if isinstance(raw, str) and raw.lower() in ("abort", "skip", "retry"):
+        policy = raw.lower()
+    else:
+        policy = "abort"
+    max_retries = int(step_def.get("max_retries", 1)) if policy == "retry" else 0
+    return policy, max_retries
 
 
 # ---- Step execution helpers ----
@@ -161,6 +169,7 @@ async def run_yaml_case(
     execution_id: str | None = None,
     results_dir: Path | None = None,
     llm=None,
+    step_filter: list[str] | None = None,
 ) -> dict:
     """Run a YAML-defined test case.
 
@@ -170,6 +179,7 @@ async def run_yaml_case(
         execution_id: Execution identifier for events.
         results_dir: Directory for saving results.
         llm: Optional LLM provider instance. If None, auto-detects from env.
+        step_filter: Optional list of step names to run. None = run all.
 
     Returns:
         Report dict with case_name, status, steps, etc.
@@ -217,6 +227,11 @@ async def run_yaml_case(
     for i, step_def in enumerate(steps):
         step_name = step_def.get("name", f"step_{i + 1}")
 
+        # Filter steps if requested
+        if step_filter and step_name not in step_filter:
+            logger.info(f"[YamlRunner] Skipping {step_name} (not in filter)")
+            continue
+
         # Determine step type and argument
         step_type = None
         step_arg = None
@@ -248,53 +263,64 @@ async def run_yaml_case(
         logger.info(f"[YamlRunner] {step_name} ({step_type}): {step_arg}")
 
         # Advance AIContext for new step, carrying over perception cache
-        new_ai = AIContext(
-            page=session.page,
-            case_dir=case_dir,
-            step_id=step_name,
-            on_log=on_log,
-            default_mode="auto",
-            execution_id=eid,
-            max_steps=max_steps,
-            llm=llm,
-        )
         if ai is not None:
-            new_ai._page_analysis = ai._page_analysis
-            new_ai._page_info = ai._page_info
-        ai = new_ai
+            ai = ai.copy_for_step(step_name)
+        else:
+            ai = AIContext(
+                page=session.page,
+                case_dir=case_dir,
+                step_id=step_name,
+                on_log=on_log,
+                default_mode="auto",
+                execution_id=eid,
+                max_steps=max_steps,
+                llm=llm,
+            )
         ai._step_started_at = time.time()
+
+        policy, max_retries = _step_failure_policy(step_def)
+        attempt_limit = max_retries + 1  # 1 initial + N retries
 
         entry: dict[str, Any] = {
             "step_id": step_name,
             "type": step_type,
         }
+        status = "failed"
 
-        try:
-            executor = _STEP_EXECUTORS.get(step_type)
-            if executor is None:
-                raise ValueError(f"Unknown step type: {step_type}")
+        for attempt in range(attempt_limit):
+            if attempt > 0:
+                logger.info(f"[YamlRunner] Retrying {step_name} (attempt {attempt + 1}/{attempt_limit})")
 
-            status, detail = await executor(ai, str(step_arg))
-            ai._step_elapsed = time.time() - ai._step_started_at
-            detail["elapsed"] = round(ai._step_elapsed, 2)
-            entry.update(detail)
+            try:
+                executor = _STEP_EXECUTORS.get(step_type)
+                if executor is None:
+                    raise ValueError(f"Unknown step type: {step_type}")
 
-            if status in ("success", "passed"):
-                success_count += 1
-                ctx.completed_steps.append(step_name)
-            else:
-                ctx.failed_step = step_name
+                status, detail = await executor(ai, str(step_arg))
+                ai._step_elapsed = time.time() - ai._step_started_at
+                detail["elapsed"] = round(ai._step_elapsed, 2)
+                entry.update(detail)
 
-        except Exception as e:
-            logger.error(f"[YamlRunner] {step_name} error: {e}")
-            ai._step_elapsed = time.time() - ai._step_started_at
-            entry.update({
-                "status": "failed",
-                "error": str(e),
-                "elapsed": round(ai._step_elapsed, 2),
-            })
+                if status in ("success", "passed"):
+                    break  # succeeded, exit retry loop
+
+            except Exception as e:
+                logger.error(f"[YamlRunner] {step_name} error (attempt {attempt + 1}): {e}")
+                ai._step_elapsed = time.time() - ai._step_started_at
+                entry.update({
+                    "status": "failed",
+                    "error": str(e),
+                    "elapsed": round(ai._step_elapsed, 2),
+                })
+                status = "failed"
+                if attempt < attempt_limit - 1:
+                    continue  # retry
+
+        if status in ("success", "passed"):
+            success_count += 1
+            ctx.completed_steps.append(step_name)
+        else:
             ctx.failed_step = step_name
-            status = "failed"
 
         results.append(entry)
 
@@ -305,10 +331,13 @@ async def run_yaml_case(
         ))
 
         # Handle failure based on on_failure policy
-        if entry.get("status") == "failed":
-            policy = _step_failure_policy(step_def)
+        if entry.get("status") in ("failed",) and status not in ("success", "passed"):
             if policy == "skip":
                 logger.warning(f"[YamlRunner] Step {step_name} failed, skipping (on_failure=skip)")
+            elif policy == "retry":
+                logger.error(f"[YamlRunner] Step {step_name} failed after {attempt_limit} attempt(s), aborting")
+                aborted = True
+                break
             else:
                 logger.error(f"[YamlRunner] Step {step_name} failed, aborting (on_failure=abort)")
                 aborted = True
@@ -322,7 +351,9 @@ async def run_yaml_case(
     failed = total - success_count
     status = "completed" if failed == 0 else "failed"
 
-    report: dict[str, Any] = {
+    from skiritai.core.report_builder import normalize_report
+
+    raw_report: dict[str, Any] = {
         "case_name": case_name,
         "status": status,
         "source": "yaml",
@@ -333,8 +364,9 @@ async def run_yaml_case(
         "elapsed_seconds": ctx.elapsed_seconds,
     }
     if aborted:
-        report["aborted"] = True
+        raw_report["aborted"] = True
 
+    report = normalize_report(raw_report)
     save_report(report, rd, label="YamlRunner")
 
     await event_bus.publish(Event(
@@ -342,6 +374,10 @@ async def run_yaml_case(
         execution_id=eid,
         data={"report": report},
     ))
+
+    # Send notification hooks
+    from skiritai.core.notify import notify_if_configured
+    await notify_if_configured(report)
 
     return report
 

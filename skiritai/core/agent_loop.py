@@ -153,8 +153,14 @@ def _build_llm(llm=None):
     return create_llm().build()
 
 
+# Agent cache: (system_prompt, model_name) → agent instance
+_agent_cache: dict[tuple[str, str], Any] = {}
+
+
 def build_agent(system_prompt: str | None = None, llm=None):
     """Build a LangGraph ReAct agent with Playwright tools + perception tools.
+
+    Agent instances are cached and reused when system_prompt and model are unchanged.
 
     Automatically registers tools and loads .env on first call.
     No manual setup required.
@@ -166,13 +172,23 @@ def build_agent(system_prompt: str | None = None, llm=None):
     _ensure_env()
     _ensure_tools()
     model = _build_llm(llm)
-    registry = ToolRegistry()
-    tools = registry.get_all()
-    return create_react_agent(
-        model=model,
-        tools=tools,
-        prompt=system_prompt or SYSTEM_PROMPT,
-    )
+    prompt = system_prompt or SYSTEM_PROMPT
+    model_name = getattr(model, "model_name", "") or str(id(model))
+
+    cache_key = (prompt, model_name)
+    if cache_key not in _agent_cache:
+        registry = ToolRegistry()
+        tools = registry.get_all()
+        _agent_cache[cache_key] = create_react_agent(
+            model=model,
+            tools=tools,
+            prompt=prompt,
+        )
+        logger.info(f"[Agent] Built new agent: model={model_name}")
+    else:
+        logger.debug(f"[Agent] Reusing cached agent: model={model_name}")
+
+    return _agent_cache[cache_key]
 
 
 async def run_agent(
