@@ -47,6 +47,7 @@ from skiritai.core.ai_context import AIContext
 from skiritai.core.case_context import CaseContext
 from skiritai.events import Event, event_bus
 from skiritai.logger import logger
+from skiritai.core.notify import notify_if_configured
 
 try:
     import yaml
@@ -384,9 +385,7 @@ async def run_yaml_case(
     ))
 
     # Fire-and-forget notification (non-blocking, best-effort)
-    import asyncio as _asyncio
-    from skiritai.core.notify import notify_if_configured
-    _asyncio.create_task(notify_if_configured(report))
+    notify_if_configured(report)
 
     return report
 

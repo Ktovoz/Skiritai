@@ -122,7 +122,7 @@ async def send_webhook(report: dict) -> bool:
         return False
 
 
-async def notify_if_configured(report: dict) -> None:
+async def _notify_channels(report: dict) -> None:
     """Send notifications for all configured channels.
 
     Add new channel backends here as they are implemented.
@@ -131,3 +131,24 @@ async def notify_if_configured(report: dict) -> None:
         report: The normalized report dict.
     """
     await send_webhook(report)
+
+
+def notify_if_configured(report: dict) -> None:
+    """Fire-and-forget notification entry point — safe to call from sync or async code.
+
+    If an event loop is running, schedules the notification as a background task.
+    Otherwise, runs the coroutine synchronously (blocking, best-effort).
+
+    Args:
+        report: The normalized report dict.
+    """
+    import asyncio
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_notify_channels(report))
+    except RuntimeError:
+        try:
+            asyncio.run(_notify_channels(report))
+        except Exception:
+            pass

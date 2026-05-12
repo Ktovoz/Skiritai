@@ -28,24 +28,9 @@ from pathlib import Path
 from skiritai.core._session import BrowserSession, OnLogCallback, save_report
 from skiritai.core.ai_context import AIContext, ActionMode
 from skiritai.core.case_context import CaseContext
+from skiritai.core.notify import notify_if_configured
 from skiritai.events import Event, event_bus
 from skiritai.logger import logger
-
-
-def _schedule_notify(report: dict) -> None:
-    """Fire-and-forget notification — non-blocking, best-effort."""
-    import asyncio
-    from skiritai.core.notify import notify_if_configured
-
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(notify_if_configured(report))
-    except RuntimeError:
-        # No running event loop — run synchronously
-        try:
-            asyncio.run(notify_if_configured(report))
-        except Exception:
-            pass
 
 
 class FlowAI:
@@ -284,7 +269,7 @@ class FlowAI:
         save_report(report, self._results_dir, label="Flow")
 
         # Fire-and-forget notification (non-blocking, best-effort)
-        _schedule_notify(report)
+        notify_if_configured(report)
 
 
 @asynccontextmanager
