@@ -96,21 +96,64 @@ def register_all_tools() -> None:
     import skiritai.core.perception  # noqa: F401 — registers perception tools
 
 
+# ---------------------------------------------------------------------------
+# Internal flags — ensure one-time init without user boilerplate
+# ---------------------------------------------------------------------------
+
+_env_loaded: bool = False
+_tools_registered: bool = False
+
+# Module-level LLM provider override (set by BaseCase / flow / run_case)
+_module_llm: Any = None
+
 # Cached LLM instance — built once per process lifetime
 _cached_llm: Any = None
+
+
+def set_llm(llm: Any) -> None:
+    """Set the LLM provider for the current execution context.
+
+    Call this before running a case to override the default auto-detection.
+    Used internally by BaseCase, flow(), run_case(), etc.
+    """
+    global _module_llm, _cached_llm
+    _module_llm = llm
+    _cached_llm = None  # rebuild with new provider
+
+
+def _ensure_env() -> None:
+    """Load .env once per process. Safe to call multiple times."""
+    global _env_loaded
+    if not _env_loaded:
+        from dotenv import load_dotenv
+        load_dotenv()
+        _env_loaded = True
+
+
+def _ensure_tools() -> None:
+    """Register all tools once per process. Safe to call multiple times."""
+    global _tools_registered
+    if not _tools_registered:
+        register_all_tools()
+        _tools_registered = True
 
 
 def _build_llm():
     """Build and return a cached LLM instance.
 
-    The LLM instance is cached at module level so it's only built once per
-    process lifetime.  LLM provider configuration does not change at runtime.
-    Use ``reset_llm_cache()`` in tests that modify environment variables.
+    If set_llm() was called, uses the explicit provider.
+    Otherwise auto-detects from environment variables / config files.
+
+    Automatically loads .env on first call.
     """
     global _cached_llm
     if _cached_llm is None:
-        provider = get_provider()
-        _cached_llm = provider.build()
+        _ensure_env()
+        if _module_llm is not None:
+            _cached_llm = _module_llm.build()
+        else:
+            provider = get_provider()
+            _cached_llm = provider.build()
     return _cached_llm
 
 
@@ -123,9 +166,14 @@ def reset_llm_cache() -> None:
 def build_agent(system_prompt: str | None = None):
     """Build a LangGraph ReAct agent with Playwright tools + perception tools.
 
+    Automatically registers tools and loads .env on first call.
+    No manual setup required.
+
     Args:
         system_prompt: Custom system prompt. If None, uses the default prompt.
     """
+    _ensure_env()
+    _ensure_tools()
     llm = _build_llm()
     registry = ToolRegistry()
     tools = registry.get_all()
