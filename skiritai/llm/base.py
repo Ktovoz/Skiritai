@@ -39,10 +39,11 @@ class LLMProvider(ABC):
     def from_config(cls, config: LLMConfig) -> LLMProvider:
         """Create from internal LLMConfig. Used by create_llm().
 
-        Default implementation delegates to from_env().
-        Subclasses should override for full config support.
+        Subclasses must implement this to map config fields to constructor args.
         """
-        return cls.from_env()
+        raise NotImplementedError(
+            f"{cls.__name__} must implement from_config() to work with create_llm()."
+        )
 
     @classmethod
     @abstractmethod

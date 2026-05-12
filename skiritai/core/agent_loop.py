@@ -125,7 +125,7 @@ def _ensure_env() -> None:
     global _env_loaded
     if not _env_loaded:
         from dotenv import load_dotenv
-        load_dotenv()
+        load_dotenv(override=False)
         _env_loaded = True
 
 

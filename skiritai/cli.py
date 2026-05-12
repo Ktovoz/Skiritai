@@ -104,7 +104,13 @@ def _cmd_run(args):
 
     # 2. Create provider from CLI args if any LLM-related args given
     llm = None
-    if getattr(args, "llm", None) or getattr(args, "api_key", None) or getattr(args, "model", None) or getattr(args, "config", None):
+    has_llm_args = (
+        getattr(args, "llm", None)
+        or getattr(args, "api_key", None)
+        or getattr(args, "model", None)
+        or getattr(args, "config", None)
+    )
+    if has_llm_args:
         llm = create_llm(
             provider=getattr(args, "llm", None),
             api_key=getattr(args, "api_key", None),
@@ -224,26 +230,9 @@ def _cmd_config(args):
 
 def _config_show():
     """Display current effective LLM configuration."""
-    from skiritai.llm._factory import create_llm, _load_config_file, _discover_config_file
+    from skiritai.llm._factory import _resolve_config
 
-    # Try to load config without building a provider
-    import os
-    from skiritai.llm._config import LLMConfig
-
-    cfg = LLMConfig()
-    cfg.provider = os.getenv("LLM_PROVIDER")
-    cfg.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-    cfg.base_url = os.getenv("OPENAI_BASE_URL")
-    cfg.model = os.getenv("LLM_MODEL")
-
-    file_cfg = _load_config_file(None)
-    if file_cfg:
-        for field in ("provider", "api_key", "base_url", "model", "temperature", "max_tokens"):
-            val = getattr(file_cfg, field)
-            if val is not None:
-                setattr(cfg, field, val)
-
-    config_file = _discover_config_file()
+    cfg, config_file = _resolve_config()
 
     print("Effective LLM Configuration:")
     print(f"  Config file: {config_file or '(none)'}")
@@ -261,7 +250,9 @@ def _config_check():
 
     try:
         provider = create_llm()
+        llm = provider.build()
         print(f"Provider: {provider.name}")
+        print(f"Model:    {getattr(llm, 'model_name', 'N/A')}")
         print("Configuration is valid.")
     except Exception as e:
         print(f"Configuration error: {e}")

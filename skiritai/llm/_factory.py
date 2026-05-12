@@ -33,12 +33,14 @@ def load_env(env_file: str | Path | None = None, *, search: bool = True) -> None
 
 
 def _search_and_load_dotenv() -> None:
-    """Search for .env in CWD -> parent dirs -> ~/.skiritai/.env."""
+    """Search for .env in CWD -> parent dirs (max 10) -> ~/.skiritai/.env."""
     from dotenv import load_dotenv
 
-    # 1. CWD and parent dirs
+    # 1. CWD and parent dirs (limit depth)
     cwd = Path.cwd()
-    for parent in [cwd] + list(cwd.parents):
+    for i, parent in enumerate([cwd] + list(cwd.parents)):
+        if i > 10:
+            break
         candidate = parent / ".env"
         if candidate.is_file():
             load_dotenv(candidate, override=False)
@@ -63,7 +65,17 @@ def _auto_load_env() -> None:
 
 def _expand_env_vars(value: str) -> str:
     """Expand ${VAR} references in config values."""
-    return re.sub(r'\$\{(\w+)\}', lambda m: os.getenv(m.group(1), ''), value)
+    def _replace(m: re.Match) -> str:
+        var_name = m.group(1)
+        val = os.getenv(var_name)
+        if val is None:
+            logger.warning(
+                f"[Config] Environment variable '${{{var_name}}}' referenced in "
+                f"config but not set — substituting empty string."
+            )
+            return ""
+        return val
+    return re.sub(r'\$\{(\w+)\}', _replace, value)
 
 
 def _load_toml(path: Path) -> dict:
@@ -96,7 +108,7 @@ def _load_yaml(path: Path) -> dict:
 
     with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    return data
+    return data or {}
 
 
 def _parse_config_file(path: Path) -> LLMConfig:
@@ -130,10 +142,12 @@ def _parse_config_file(path: Path) -> LLMConfig:
 
 
 def _discover_config_file() -> Path | None:
-    """Auto-discover config file: CWD upward, then $SKIRITAI_CONFIG, then home."""
-    # 1. CWD upward search
+    """Auto-discover config file: CWD upward (max 10 levels), then $SKIRITAI_CONFIG, then home."""
+    # 1. CWD upward search (limit depth to avoid scanning entire filesystem)
     cwd = Path.cwd()
-    for parent in [cwd] + list(cwd.parents):
+    for i, parent in enumerate([cwd] + list(cwd.parents)):
+        if i > 10:
+            break
         for name in ("skiritai.toml", "skiritai.yaml", "skiritai.yml"):
             candidate = parent / name
             if candidate.is_file():
@@ -171,6 +185,53 @@ def _load_config_file(from_file: str | Path | None) -> LLMConfig | None:
     return None
 
 
+def _resolve_config(
+    provider: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    *,
+    from_file: str | Path | None = None,
+) -> tuple[LLMConfig, Path | None]:
+    """Resolve and merge all config sources into a single LLMConfig.
+
+    Returns:
+        (merged_config, config_file_path_or_None)
+    """
+    # 1. Build base from env vars (lowest priority)
+    cfg = LLMConfig()
+    cfg.provider = os.getenv("LLM_PROVIDER")
+    cfg.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+    cfg.base_url = os.getenv("OPENAI_BASE_URL")
+    cfg.model = os.getenv("LLM_MODEL")
+
+    # 2. Load config file (overrides env)
+    config_file = None
+    if from_file is not None:
+        config_file = Path(from_file)
+    else:
+        config_file = _discover_config_file()
+
+    file_cfg = _load_config_file(config_file) if config_file else None
+    if file_cfg is not None:
+        for field in ("provider", "api_key", "base_url", "model", "temperature", "max_tokens"):
+            val = getattr(file_cfg, field)
+            if val is not None:
+                setattr(cfg, field, val)
+
+    # 3. Explicit args override everything (highest)
+    if provider:
+        cfg.provider = provider
+    if api_key:
+        cfg.api_key = api_key
+    if base_url:
+        cfg.base_url = base_url
+    if model:
+        cfg.model = model
+
+    return cfg, config_file
+
+
 # ---------------------------------------------------------------------------
 # create_llm() — public factory function
 # ---------------------------------------------------------------------------
@@ -206,30 +267,11 @@ def create_llm(
     # 0. Auto-load .env (safe: override=False)
     _auto_load_env()
 
-    # 1. Build base from env vars (lowest priority)
-    cfg = LLMConfig()
-    cfg.provider = os.getenv("LLM_PROVIDER")
-    cfg.api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-    cfg.base_url = os.getenv("OPENAI_BASE_URL")
-    cfg.model = os.getenv("LLM_MODEL")
-
-    # 2. Load config file (overrides env)
-    file_cfg = _load_config_file(from_file)
-    if file_cfg is not None:
-        for field in ("provider", "api_key", "base_url", "model", "temperature", "max_tokens"):
-            val = getattr(file_cfg, field)
-            if val is not None:
-                setattr(cfg, field, val)
-
-    # 3. Explicit args override everything (highest)
-    if provider:
-        cfg.provider = provider
-    if api_key:
-        cfg.api_key = api_key
-    if base_url:
-        cfg.base_url = base_url
-    if model:
-        cfg.model = model
+    # 1-3. Resolve merged config from all sources
+    cfg, _ = _resolve_config(
+        provider=provider, api_key=api_key,
+        base_url=base_url, model=model, from_file=from_file,
+    )
 
     # 4. Validate
     if not cfg.api_key:
