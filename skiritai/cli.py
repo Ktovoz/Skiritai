@@ -27,8 +27,8 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # --- run ---
-    run_parser = subparsers.add_parser("run", help="Run a test case")
-    run_parser.add_argument("case_dir", type=str, help="Path to case directory containing case.py")
+    run_parser = subparsers.add_parser("run", help="Run one or more test cases")
+    run_parser.add_argument("case_dir", type=str, nargs="+", help="Path(s) to case directory(ies) containing case.py/case.yaml")
     run_parser.add_argument("--results-dir", type=str, default=None,
                             help="Directory to save test results (default: <case_dir>/test_results)")
     run_parser.add_argument("--env-file", type=str, default=None,
@@ -37,10 +37,13 @@ def main():
                             help="Path to skiritai.toml or skiritai.yaml config file")
     run_parser.add_argument("--llm", type=str, default=None,
                             help="LLM provider name (openai, anthropic)")
-    run_parser.add_argument("--api-key", type=str, default=None,
-                            help="LLM API key")
     run_parser.add_argument("--model", type=str, default=None,
                             help="LLM model name")
+    run_parser.add_argument("--steps", type=str, default=None,
+                            help="Comma-separated step names to run (e.g. 'step1,step3'). "
+                                 "Default: run all steps.")
+    run_parser.add_argument("--parallel", action="store_true",
+                            help="Run multiple cases in parallel (requires --steps for isolation)")
 
     # --- serve ---
     serve_parser = subparsers.add_parser("serve", help="Start the web server (requires [web] extra)")
@@ -106,14 +109,12 @@ def _cmd_run(args):
     llm = None
     has_llm_args = (
         getattr(args, "llm", None)
-        or getattr(args, "api_key", None)
         or getattr(args, "model", None)
         or getattr(args, "config", None)
     )
     if has_llm_args:
         llm = create_llm(
             provider=getattr(args, "llm", None),
-            api_key=getattr(args, "api_key", None),
             model=getattr(args, "model", None),
             from_file=getattr(args, "config", None),
         )
@@ -121,39 +122,97 @@ def _cmd_run(args):
     from skiritai.core.agent_loop import register_all_tools
     register_all_tools()
 
-    case_dir = Path(args.case_dir).resolve()
-    if not case_dir.exists():
-        print(f"Error: case directory not found: {case_dir}")
-        sys.exit(1)
+    case_dirs = [Path(d).resolve() for d in args.case_dir]
+    for d in case_dirs:
+        if not d.exists():
+            print(f"Error: case directory not found: {d}")
+            sys.exit(1)
 
     results_dir = Path(args.results_dir).resolve() if args.results_dir else None
 
-    # Detection priority: case.py > case.yaml/case.yml.
-    # When both exist, Python is preferred. Use run_yaml_case() to force YAML.
-    has_yaml = (case_dir / "case.yaml").is_file() or (case_dir / "case.yml").is_file()
-    has_py = (case_dir / "case.py").is_file()
+    # Live progress callback for CLI
+    import sys as _sys
 
-    if has_yaml and not has_py:
-        from skiritai.core.yaml_runner import run_yaml_case
-        report = asyncio.run(run_yaml_case(case_dir, results_dir=results_dir, llm=llm))
+    def _on_log(msg: str) -> None:
+        display = msg[:120] + "..." if len(msg) > 120 else msg
+        _sys.stderr.write(f"  {display}\n")
+        _sys.stderr.flush()
+
+    step_filter = (
+        [s.strip() for s in args.steps.split(",") if s.strip()]
+        if getattr(args, "steps", None) else None
+    )
+    parallel = getattr(args, "parallel", False)
+    error_exit = False
+
+    async def _run_one(case_dir: Path) -> dict:
+        has_yaml = (case_dir / "case.yaml").is_file() or (case_dir / "case.yml").is_file()
+        has_py = (case_dir / "case.py").is_file()
+
+        if has_yaml and not has_py:
+            from skiritai.core.yaml_runner import run_yaml_case
+            return await run_yaml_case(
+                case_dir, results_dir=results_dir, llm=llm,
+                on_log=_on_log, step_filter=step_filter,
+            )
+        else:
+            from skiritai.core.runner import run_case
+            return await run_case(
+                case_dir, results_dir=results_dir, llm=llm,
+                on_log=_on_log, step_filter=step_filter,
+            )
+
+    # ---- Execute ----
+    if parallel and len(case_dirs) > 1:
+        async def _run_parallel():
+            tasks = [_run_one(d) for d in case_dirs]
+            return await asyncio.gather(*tasks, return_exceptions=True)
+
+        results = asyncio.run(_run_parallel())
+        reports = []
+        for d, r in zip(case_dirs, results):
+            if isinstance(r, Exception):
+                print(f"\nError running {d.name}: {r}")
+                reports.append({"case_name": d.name, "status": "failed", "error": str(r)})
+            else:
+                reports.append(r)
     else:
-        from skiritai.core.runner import run_case
-        report = asyncio.run(run_case(case_dir, results_dir=results_dir, llm=llm))
+        reports = []
+        for d in case_dirs:
+            try:
+                reports.append(asyncio.run(_run_one(d)))
+            except (FileNotFoundError, ValueError) as e:
+                print(f"Error: {e}")
+                print(f"Hint: A case directory must contain either case.py or case.yaml/case.yml.")
+                print(f"      Directory: {d}")
+                error_exit = True
 
-    # Print report
-    print(f"\n{'=' * 60}")
-    print(f"Case: {report.get('case_name')}")
-    print(f"Status: {report.get('status')}")
-    print(f"Steps: {report.get('success_count', 0)}/{report.get('total_steps', 0)} passed")
-    if report.get("elapsed_seconds"):
-        print(f"Elapsed: {report['elapsed_seconds']}s")
-    print(f"{'=' * 60}")
+    # ---- Print results ----
+    for report in reports:
+        print(f"\n{'=' * 60}")
+        print(f"Case: {report.get('case_name')}")
+        print(f"Status: {report.get('status')}")
+        sc = report.get("success_count", 0)
+        total = report.get("total_steps", 0)
+        print(f"Steps: {sc}/{total} passed")
+        if report.get("elapsed_seconds"):
+            print(f"Elapsed: {report['elapsed_seconds']}s")
+        print(f"{'=' * 60}")
 
-    for step in report.get("steps", []):
-        icon = "✓" if step["status"] == "success" else "✗"
-        print(f"  {icon} {step['step_id']} ({step.get('mode', '')}) — {step.get('summary', '')}")
+        for step in report.get("steps", []):
+            icon = "✓" if step["status"] == "success" else "✗"
+            print(f"  {icon} {step['step_id']} ({step.get('mode', '')}) — {step.get('summary', '')}")
 
-    sys.exit(0 if report.get("status") == "completed" else 1)
+        if report.get("status") != "completed":
+            error_exit = True
+
+    if len(reports) > 1:
+        print(f"\n{'=' * 60}")
+        passed = sum(1 for r in reports if r.get("status") == "completed")
+        print(f"Summary: {passed}/{len(reports)} cases passed")
+        print(f"{'=' * 60}")
+
+    sys.exit(1 if error_exit else 0)
 
 
 def _cmd_serve(args):
@@ -198,7 +257,16 @@ def _cmd_list(args):
         steps = c.get("steps", [])
         if steps and isinstance(steps, list):
             if isinstance(steps[0], str):
-                print(f"    Steps: {', '.join(steps)}")
+                # Python steps: check replay script status per step
+                case_dir = Path(c["dir"])
+                scripts_dir = case_dir / "scripts"
+                step_status = []
+                for s_name in steps:
+                    if (scripts_dir / f"{s_name}.py").exists():
+                        step_status.append(f"{s_name} [replay]")
+                    else:
+                        step_status.append(f"{s_name} [ai]")
+                print(f"    Steps: {', '.join(step_status)}")
             elif isinstance(steps[0], dict):
                 step_summaries = []
                 for s in steps:

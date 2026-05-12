@@ -153,8 +153,35 @@ def _build_llm(llm=None):
     return create_llm().build()
 
 
+# Agent cache: bounded LRU dict (max 8 entries) keyed by (prompt_hash, model_id)
+_MAX_CACHE_SIZE = 8
+_agent_cache: dict[tuple[int, str], Any] = {}
+_agent_cache_order: list[tuple[int, str]] = []  # LRU eviction order
+
+
+def _agent_cache_key(prompt: str, model) -> tuple[int, str]:
+    """Build a stable cache key: (hash(prompt), model identifier string).
+
+    Uses ``model_name`` + provider metadata to avoid id(model) which
+    churns on every ``build()`` call.
+    """
+    model_id = (
+        getattr(model, "model_name", "")
+        or getattr(model, "model", "")
+        or type(model).__name__
+    )
+    # Append provider name if available (distinguishes openai/gpt-4o from anthropic/gpt-4o)
+    provider = getattr(model, "provider", "") or getattr(model, "_provider", "")
+    if provider:
+        model_id = f"{provider}/{model_id}"
+    return (hash(prompt), model_id)
+
+
 def build_agent(system_prompt: str | None = None, llm=None):
     """Build a LangGraph ReAct agent with Playwright tools + perception tools.
+
+    Agent instances are cached (max 8, LRU eviction) and reused when
+    system_prompt and model are unchanged.
 
     Automatically registers tools and loads .env on first call.
     No manual setup required.
@@ -163,16 +190,37 @@ def build_agent(system_prompt: str | None = None, llm=None):
         system_prompt: Custom system prompt. If None, uses the default prompt.
         llm: Optional LLM provider instance. If None, auto-detects from env.
     """
+    global _agent_cache_order
     _ensure_env()
     _ensure_tools()
     model = _build_llm(llm)
-    registry = ToolRegistry()
-    tools = registry.get_all()
-    return create_react_agent(
-        model=model,
-        tools=tools,
-        prompt=system_prompt or SYSTEM_PROMPT,
-    )
+    prompt = system_prompt or SYSTEM_PROMPT
+    cache_key = _agent_cache_key(prompt, model)
+
+    if cache_key not in _agent_cache:
+        # Evict oldest entry if cache is full
+        if len(_agent_cache) >= _MAX_CACHE_SIZE and _agent_cache_order:
+            oldest = _agent_cache_order.pop(0)
+            _agent_cache.pop(oldest, None)
+            logger.debug(f"[Agent] Cache evicted entry: {oldest}")
+
+        registry = ToolRegistry()
+        tools = registry.get_all()
+        _agent_cache[cache_key] = create_react_agent(
+            model=model,
+            tools=tools,
+            prompt=prompt,
+        )
+        _agent_cache_order.append(cache_key)
+        logger.info(f"[Agent] Built new agent (cache size={len(_agent_cache)}/{_MAX_CACHE_SIZE})")
+    else:
+        # Move to end (most recently used)
+        if cache_key in _agent_cache_order:
+            _agent_cache_order.remove(cache_key)
+        _agent_cache_order.append(cache_key)
+        logger.debug(f"[Agent] Reusing cached agent (cache size={len(_agent_cache)})")
+
+    return _agent_cache[cache_key]
 
 
 async def run_agent(
