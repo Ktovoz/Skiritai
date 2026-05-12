@@ -82,6 +82,7 @@ class FlowAI:
             default_mode="auto",
             execution_id="flow",
             max_steps=self._max_steps,
+            llm=self._llm,
         )
         return self._ai
 
@@ -274,11 +275,8 @@ async def flow(
         async with flow(llm=OpenAIProvider(api_key="sk-xxx", model="gpt-5")) as ai:
             await ai.action("打开百度首页")
     """
-    from skiritai.core.agent_loop import register_all_tools, set_llm
+    from skiritai.core.agent_loop import register_all_tools
     register_all_tools()
-
-    if llm is not None:
-        set_llm(llm)
 
     rd = Path(results_dir) if results_dir else None
     session = BrowserSession(headless=headless)

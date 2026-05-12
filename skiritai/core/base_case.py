@@ -217,10 +217,8 @@ class BaseCase:
         # Per-case headless override: None = use env var, True/False = explicit
         self.headless: bool | None = None
 
-        # LLM provider override: if given, inject into agent_loop
-        if llm is not None:
-            from skiritai.core.agent_loop import set_llm
-            set_llm(llm)
+        # LLM provider — threaded through _make_ai → AIContext → run_agent
+        self._llm = llm
 
         # Global context — state machine + store + browser session info
         self._ctx = CaseContext(
@@ -483,6 +481,7 @@ class BaseCase:
             default_mode=default_mode,
             execution_id=self._execution_id,
             max_steps=effective_max_steps,
+            llm=self._llm,
         )
 
     async def run_step(self, step_name: str, on_log=None) -> dict:

@@ -24,6 +24,9 @@ CASES_ROOT = Path.cwd() / "examples"
 # Case index cache: {case_id: Path} — rebuilt when set_cases_root() is called
 _case_index: dict[str, Path] | None = None
 
+# LLM provider — set via create_app(), shared by all API requests
+_llm_config = None
+
 
 def _build_case_index() -> dict[str, Path]:
     """Scan CASES_ROOT and build a {case_id: directory_path} index."""
@@ -40,6 +43,12 @@ def set_cases_root(root: Path) -> None:
     CASES_ROOT = root.resolve()
     _case_index = _build_case_index()
     logger.info(f"[API] Cases root: {CASES_ROOT} ({len(_case_index)} cases indexed)")
+
+
+def set_llm(llm) -> None:
+    """Set the LLM provider for the web server. Called by create_app()."""
+    global _llm_config
+    _llm_config = llm
 
 
 def _find_case_dir(case_id: str) -> Path | None:
@@ -130,7 +139,7 @@ async def api_run_case(case_id: str):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         results_dir = case_dir / "test_results" / timestamp
         try:
-            report = await run_case(case_dir, execution_id=case_id, results_dir=results_dir)
+            report = await run_case(case_dir, execution_id=case_id, results_dir=results_dir, llm=_llm_config)
             # Save result to disk (API path — distinct from CLI path which uses BaseCase._save_report)
             results_dir.mkdir(parents=True, exist_ok=True)
             (results_dir / "report.json").write_text(
@@ -229,12 +238,15 @@ class ScriptUpdate(BaseModel):
 
 @router.put("/{case_id}/scripts/{step_id}")
 async def api_update_script(case_id: str, step_id: str, body: ScriptUpdate):
-    """Update script content."""
+    """Update script content and recompute integrity hash."""
     script_path = _get_case_dir_or_404(case_id) / "scripts" / f"{step_id}.py"
     if not script_path.exists():
         raise HTTPException(status_code=404, detail="Script not found")
 
     script_path.write_text(body.content, encoding="utf-8")
+    # Recompute hash so _verify_script() won't reject the updated script
+    from skiritai.core.ai_context import _save_script_hash
+    _save_script_hash(script_path, body.content)
     return {"step_id": step_id, "content": body.content}
 
 

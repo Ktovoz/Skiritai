@@ -103,23 +103,6 @@ def register_all_tools() -> None:
 _env_loaded: bool = False
 _tools_registered: bool = False
 
-# Module-level LLM provider override (set by BaseCase / flow / run_case)
-_module_llm: Any = None
-
-# Cached LLM instance — built once per process lifetime
-_cached_llm: Any = None
-
-
-def set_llm(llm: Any) -> None:
-    """Set the LLM provider for the current execution context.
-
-    Call this before running a case to override the default auto-detection.
-    Used internally by BaseCase, flow(), run_case(), etc.
-    """
-    global _module_llm, _cached_llm
-    _module_llm = llm
-    _cached_llm = None  # rebuild with new provider
-
 
 def _ensure_env() -> None:
     """Load .env once per process. Safe to call multiple times."""
@@ -138,32 +121,22 @@ def _ensure_tools() -> None:
         _tools_registered = True
 
 
-def _build_llm():
-    """Build and return a cached LLM instance.
+def _build_llm(llm=None):
+    """Build and return an LLM instance.
 
-    If set_llm() was called, uses the explicit provider.
-    Otherwise auto-detects from environment variables / config files.
+    If *llm* is provided (an :class:`LLMProvider` instance), use it directly.
+    Otherwise auto-detects from environment variables.
 
     Automatically loads .env on first call.
     """
-    global _cached_llm
-    if _cached_llm is None:
-        _ensure_env()
-        if _module_llm is not None:
-            _cached_llm = _module_llm.build()
-        else:
-            provider = get_provider()
-            _cached_llm = provider.build()
-    return _cached_llm
+    _ensure_env()
+    if llm is not None:
+        return llm.build()
+    provider = get_provider()
+    return provider.build()
 
 
-def reset_llm_cache() -> None:
-    """Reset the cached LLM instance. Use in tests that change LLM env vars."""
-    global _cached_llm
-    _cached_llm = None
-
-
-def build_agent(system_prompt: str | None = None):
+def build_agent(system_prompt: str | None = None, llm=None):
     """Build a LangGraph ReAct agent with Playwright tools + perception tools.
 
     Automatically registers tools and loads .env on first call.
@@ -171,14 +144,15 @@ def build_agent(system_prompt: str | None = None):
 
     Args:
         system_prompt: Custom system prompt. If None, uses the default prompt.
+        llm: Optional LLM provider instance. If None, auto-detects from env.
     """
     _ensure_env()
     _ensure_tools()
-    llm = _build_llm()
+    model = _build_llm(llm)
     registry = ToolRegistry()
     tools = registry.get_all()
     return create_react_agent(
-        model=llm,
+        model=model,
         tools=tools,
         prompt=system_prompt or SYSTEM_PROMPT,
     )
@@ -192,6 +166,7 @@ async def run_agent(
         execution_id: str = "default",
         case_dir: Path | None = None,
         max_steps: int = 20,
+        llm=None,
 ) -> dict:
     """
     Run the LangGraph ReAct agent on a task.
@@ -203,6 +178,8 @@ async def run_agent(
         on_log: Optional callback for real-time log streaming
         execution_id: Execution identifier for event publishing
         case_dir: Optional case directory for loading case-level system prompt
+        max_steps: Maximum agent tool-call steps (recursion_limit)
+        llm: Optional LLM provider instance. If None, auto-detects from env.
 
     Returns:
         dict with keys: success, summary, steps, token_usage
@@ -211,7 +188,7 @@ async def run_agent(
 
     # Resolve system prompt (case-level > env > default)
     system_prompt = load_system_prompt(case_dir)
-    agent = build_agent(system_prompt=system_prompt)
+    agent = build_agent(system_prompt=system_prompt, llm=llm)
 
     if url:
         user_msg = f"请先导航到 {url}，然后执行以下任务：\n{task_description}"
