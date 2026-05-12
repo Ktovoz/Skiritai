@@ -214,6 +214,7 @@ def _resolve_config(
 
     file_cfg = _load_config_file(config_file) if config_file else None
     if file_cfg is not None:
+        logger.info(f"[LLM] Using config file: {config_file}")
         for field in ("provider", "api_key", "base_url", "model", "temperature", "max_tokens"):
             val = getattr(file_cfg, field)
             if val is not None:
