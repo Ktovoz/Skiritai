@@ -1,0 +1,9 @@
+# Skiritai LLM 配置 — 本地 MLX 模型（OpenAI 兼容）
+# 指向本地 127.0.0.1:8901 上运行的 Qwen3.5-0.8B 服务
+# 需要先启动本地服务：python /Users/Joeshen/Dpan/code/tools/aimodel/tests/compatibility/mac/serve.py
+
+[llm]
+provider = "openai"
+api_key = "local"
+base_url = "http://127.0.0.1:8901/v1"
+model = "Qwen3.5-0.8B"
