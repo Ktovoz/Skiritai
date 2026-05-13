@@ -219,9 +219,11 @@ class TestStepModeBehavior:
 
             scripts_dir = case_dir / "scripts"
             scripts_dir.mkdir()
-            (scripts_dir / "replay_step.py").write_text(
-                "async def run(page, context):\n    pass\n"
-            )
+            replay_content = "async def run(page, context):\n    pass\n"
+            replay_path = scripts_dir / "replay_step.py"
+            replay_path.write_text(replay_content)
+            from skiritai.core.ai_context import _save_script_hash
+            _save_script_hash(replay_path, replay_content)
 
             class ReplayCase(BaseCase):
                 async def setup(self):
@@ -250,9 +252,11 @@ class TestStepModeBehavior:
 
             scripts_dir = case_dir / "scripts"
             scripts_dir.mkdir()
-            (scripts_dir / "auto_step.py").write_text(
-                "async def run(page, context):\n    pass\n"
-            )
+            script_path = scripts_dir / "auto_step.py"
+            script_content = "async def run(page, context):\n    pass\n"
+            script_path.write_text(script_content)
+            from skiritai.core.ai_context import _save_script_hash
+            _save_script_hash(script_path, script_content)
 
             class AutoCase(BaseCase):
                 async def setup(self):

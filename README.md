@@ -8,7 +8,6 @@
 
 <br>
 
-[![Version](https://img.shields.io/badge/version-0.0.3-blue)](https://github.com/Ktovoz/Skiritai/releases)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Playwright](https://img.shields.io/badge/Playwright-1.40+-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
