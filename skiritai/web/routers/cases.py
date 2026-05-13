@@ -35,22 +35,12 @@ def _build_case_index() -> dict[str, Path]:
     leaf name, disambiguates by prefixing with the parent directory name
     separated by ``__`` (e.g. ``baidu_search__01_basecase``).
     """
-    from collections import Counter
+    from skiritai.core._case_discovery import resolve_case_ids
 
-    index: dict[str, Path] = {}
     if not CASES_ROOT.exists():
-        return index
-
+        return {}
     all_dirs = [case_py.parent for case_py in CASES_ROOT.rglob("case.py")]
-    name_counts = Counter(d.name for d in all_dirs)
-
-    for d in all_dirs:
-        if name_counts[d.name] > 1:
-            case_id = f"{d.parent.name}__{d.name}"
-        else:
-            case_id = d.name
-        index[case_id] = d
-    return index
+    return resolve_case_ids(all_dirs)
 
 
 def set_cases_root(root: Path) -> None:

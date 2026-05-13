@@ -295,6 +295,8 @@ async def press_key(key: str) -> str:
     Args:
         key: 按键名称，如 'Enter', 'Escape', 'Tab', 'Backspace', 'ArrowDown', 'a', 'Control+A' 等
     """
+    if len(key) > 50:
+        raise ValueError(f"按键名称过长: {len(key)} 字符，超过 50 字符上限")
     page = get_page()
     await page.keyboard.press(key)
     return f"已按下按键: {key}"

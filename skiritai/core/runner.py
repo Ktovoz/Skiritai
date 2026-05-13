@@ -80,24 +80,19 @@ def list_cases(cases_root: Path) -> list[dict]:
     Recursively scans subdirectories. Case IDs use leaf directory names,
     with ``parent__leaf`` disambiguation when leaf names collide.
     """
-    from collections import Counter
-
     cases = []
     if not cases_root.exists():
         return cases
 
     seen_dirs = set()
 
-    # Python cases — pre-scan for duplicate leaf names
-    all_py_dirs = [d.parent for d in sorted(cases_root.rglob("case.py"))]
-    name_counts = Counter(d.name for d in all_py_dirs)
+    # Python cases — resolve unique IDs (disambiguates duplicate leaf names)
+    from skiritai.core._case_discovery import resolve_case_ids
 
-    for case_dir in sorted(cases_root.rglob("case.py")):
-        d = case_dir.parent
-        if name_counts[d.name] > 1:
-            case_id = f"{d.parent.name}__{d.name}"
-        else:
-            case_id = d.name
+    all_py_dirs = [d.parent for d in sorted(cases_root.rglob("case.py"))]
+    case_id_map = resolve_case_ids(all_py_dirs)  # {case_id: dir_path}
+
+    for case_id, d in case_id_map.items():
         seen_dirs.add(str(d))
         try:
             case_class = discover_case_class(d)
