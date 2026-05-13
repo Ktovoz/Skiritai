@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "skiritai"
-version = "0.0.6"
+version = "0.0.7"
 description = "AI-driven browser test automation framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -50,6 +50,7 @@ web = [
 anthropic = [
     "langchain-anthropic>=0.3.0",
 ]
+[dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
@@ -62,11 +63,9 @@ dev = [
 [project.scripts]
 skiritai = "skiritai.cli:main"
 
-[tool.setuptools.packages.find]
-include = ["skiritai*"]
-
-[tool.setuptools.package-data]
-skiritai = ["py.typed"]
+[tool.hatch.build.targets.wheel]
+packages = ["skiritai"]
+artifacts = ["skiritai/py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

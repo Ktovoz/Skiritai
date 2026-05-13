@@ -150,6 +150,8 @@ class TestRunYamlCase:
         mock_ai._step_elapsed = 0.5
         mock_ai._page_analysis = None
         mock_ai._page_info = None
+        mock_ai.step_id = "mock_step"
+        mock_ai.copy_for_step = MagicMock(return_value=mock_ai)
         return mock_ai
 
     async def test_simple_two_step_case(self, tmp_path: Path):
@@ -348,7 +350,9 @@ steps:
 
                     report = await run_yaml_case(case_dir)
 
-        assert len(report["steps"]) == 1
+        assert len(report["steps"]) == 2
+        assert report["steps"][0]["status"] == "skipped"
+        assert report["steps"][1]["status"] == "success"
 
     async def test_browser_lifecycle_called(self, tmp_path: Path):
         from skiritai.core.yaml_runner import run_yaml_case

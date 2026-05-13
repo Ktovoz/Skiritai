@@ -96,44 +96,131 @@ def register_all_tools() -> None:
     import skiritai.core.perception  # noqa: F401 — registers perception tools
 
 
-# Cached LLM instance — built once per process lifetime
-_cached_llm: Any = None
+# ---------------------------------------------------------------------------
+# Internal flags — ensure one-time init without user boilerplate
+# ---------------------------------------------------------------------------
+
+_env_loaded: bool = False
+_tools_registered: bool = False
+
+# Module-level LLM provider override (set via set_llm())
+_module_llm: Any = None
 
 
-def _build_llm():
-    """Build and return a cached LLM instance.
+def set_llm(llm: Any) -> None:
+    """Set a module-level LLM provider override.
 
-    The LLM instance is cached at module level so it's only built once per
-    process lifetime.  LLM provider configuration does not change at runtime.
-    Use ``reset_llm_cache()`` in tests that modify environment variables.
+    Once set, all subsequent ``_build_llm()`` calls will use this provider
+    instead of auto-detecting from environment variables.
+
+    Args:
+        llm: An LLMProvider instance.
     """
-    global _cached_llm
-    if _cached_llm is None:
-        provider = get_provider()
-        _cached_llm = provider.build()
-    return _cached_llm
+    global _module_llm
+    _module_llm = llm
 
 
-def reset_llm_cache() -> None:
-    """Reset the cached LLM instance. Use in tests that change LLM env vars."""
-    global _cached_llm
-    _cached_llm = None
+def _ensure_env() -> None:
+    """Load .env once per process. Safe to call multiple times."""
+    global _env_loaded
+    if not _env_loaded:
+        from dotenv import load_dotenv
+        load_dotenv(override=False)
+        _env_loaded = True
 
 
-def build_agent(system_prompt: str | None = None):
+def _ensure_tools() -> None:
+    """Register all tools once per process. Safe to call multiple times."""
+    global _tools_registered
+    if not _tools_registered:
+        register_all_tools()
+        _tools_registered = True
+
+
+def _build_llm(llm=None):
+    """Build and return an LLM instance.
+
+    Priority: explicit *llm* arg > module-level override > create_llm() auto.
+
+    Automatically loads .env on first call.
+    """
+    _ensure_env()
+    if llm is not None:
+        return llm.build()
+    if _module_llm is not None:
+        return _module_llm.build()
+    from skiritai.llm._factory import create_llm
+    return create_llm().build()
+
+
+# Agent cache: bounded LRU dict (max 8 entries) keyed by (prompt_hash, model_id)
+_MAX_CACHE_SIZE = 8
+_agent_cache: dict[tuple[int, str], Any] = {}
+_agent_cache_order: list[tuple[int, str]] = []  # LRU eviction order
+
+
+def _agent_cache_key(prompt: str, model) -> tuple[int, str]:
+    """Build a stable cache key: (hash(prompt), model identifier string).
+
+    Uses ``model_name`` + provider metadata to avoid id(model) which
+    churns on every ``build()`` call.
+    """
+    model_id = (
+        getattr(model, "model_name", "")
+        or getattr(model, "model", "")
+        or type(model).__name__
+    )
+    # Append provider name if available (distinguishes openai/gpt-4o from anthropic/gpt-4o)
+    provider = getattr(model, "provider", "") or getattr(model, "_provider", "")
+    if provider:
+        model_id = f"{provider}/{model_id}"
+    return (hash(prompt), model_id)
+
+
+def build_agent(system_prompt: str | None = None, llm=None):
     """Build a LangGraph ReAct agent with Playwright tools + perception tools.
+
+    Agent instances are cached (max 8, LRU eviction) and reused when
+    system_prompt and model are unchanged.
+
+    Automatically registers tools and loads .env on first call.
+    No manual setup required.
 
     Args:
         system_prompt: Custom system prompt. If None, uses the default prompt.
+        llm: Optional LLM provider instance. If None, auto-detects from env.
     """
-    llm = _build_llm()
-    registry = ToolRegistry()
-    tools = registry.get_all()
-    return create_react_agent(
-        model=llm,
-        tools=tools,
-        prompt=system_prompt or SYSTEM_PROMPT,
-    )
+    global _agent_cache_order
+    _ensure_env()
+    _ensure_tools()
+    model = _build_llm(llm)
+    prompt = system_prompt or SYSTEM_PROMPT
+    cache_key = _agent_cache_key(prompt, model)
+
+    if cache_key not in _agent_cache:
+        # Evict oldest entry if cache is full
+        if len(_agent_cache) >= _MAX_CACHE_SIZE and _agent_cache_order:
+            oldest = _agent_cache_order.pop(0)
+            _agent_cache.pop(oldest, None)
+            logger.debug(f"[Agent] Cache evicted entry: {oldest}")
+
+        registry = ToolRegistry()
+        tools = registry.get_all()
+        _agent_cache[cache_key] = create_react_agent(
+            model=model,
+            tools=tools,
+            prompt=prompt,
+        )
+        _agent_cache_order.append(cache_key)
+        logger.info(f"[Agent] Built new agent (cache size={len(_agent_cache)}/{_MAX_CACHE_SIZE})")
+    else:
+        # Move to end (most recently used)
+        if cache_key in _agent_cache_order:
+            _agent_cache_order.remove(cache_key)
+        _agent_cache_order.append(cache_key)
+        logger.debug(f"[Agent] Reusing cached agent (cache size={len(_agent_cache)})")
+
+    return _agent_cache[cache_key]
 
 
 async def run_agent(
@@ -144,6 +231,7 @@ async def run_agent(
         execution_id: str = "default",
         case_dir: Path | None = None,
         max_steps: int = 20,
+        llm=None,
 ) -> dict:
     """
     Run the LangGraph ReAct agent on a task.
@@ -155,6 +243,8 @@ async def run_agent(
         on_log: Optional callback for real-time log streaming
         execution_id: Execution identifier for event publishing
         case_dir: Optional case directory for loading case-level system prompt
+        max_steps: Maximum agent tool-call steps (recursion_limit)
+        llm: Optional LLM provider instance. If None, auto-detects from env.
 
     Returns:
         dict with keys: success, summary, steps, token_usage
@@ -163,7 +253,7 @@ async def run_agent(
 
     # Resolve system prompt (case-level > env > default)
     system_prompt = load_system_prompt(case_dir)
-    agent = build_agent(system_prompt=system_prompt)
+    agent = build_agent(system_prompt=system_prompt, llm=llm)
 
     if url:
         user_msg = f"请先导航到 {url}，然后执行以下任务：\n{task_description}"

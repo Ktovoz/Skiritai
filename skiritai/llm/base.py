@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ._config import LLMConfig
 
 
 class LLMProvider(ABC):
@@ -31,6 +34,16 @@ class LLMProvider(ABC):
     def from_env(cls) -> LLMProvider:
         """Create a provider instance from environment variables."""
         ...
+
+    @classmethod
+    def from_config(cls, config: LLMConfig) -> LLMProvider:
+        """Create from internal LLMConfig. Used by create_llm().
+
+        Subclasses must implement this to map config fields to constructor args.
+        """
+        raise NotImplementedError(
+            f"{cls.__name__} must implement from_config() to work with create_llm()."
+        )
 
     @classmethod
     @abstractmethod

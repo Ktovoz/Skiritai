@@ -27,14 +27,14 @@ steps:
 
 ```bash
 # 通过 CLI
-skiritai run examples/baidu_yaml
+skiritai run examples/beginner/baidu_search/03_yaml
 
 # 通过 Python
 from skiritai import run_yaml_case
 from pathlib import Path
 import asyncio
 
-report = asyncio.run(run_yaml_case(Path("examples/baidu_yaml")))
+report = asyncio.run(run_yaml_case(Path("examples/beginner/baidu_search/03_yaml")))
 ```
 
 ## 步骤类型

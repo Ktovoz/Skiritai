@@ -26,7 +26,7 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/v}"
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
-          if [[ "$TAG" =~ (a|b|rc)[0-9]+$ ]]; then
+          if [[ "$TAG" =~ (a|b|rc)[0-9]*$ ]]; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Pre-release detected: v$TAG"
           else
@@ -38,16 +38,23 @@ jobs:
         run: |
           TAG_VERSION="${{ steps.tag.outputs.version }}"
           IS_PRERELEASE="${{ steps.tag.outputs.is_prerelease }}"
-          BRANCH=$(git branch -r --contains "$GITHUB_SHA" | grep -E 'origin/(main|develop)$' | head -1 | sed 's|.*origin/||')
+          BRANCH=$(git branch -r --contains "$GITHUB_SHA" 2>/dev/null | grep -E 'origin/(main|develop)$' | head -1 | sed 's|.*origin/||')
+
+          # Fallback: on tag push (detached HEAD), infer branch from tag convention
+          #   v*-a* / v*-b* / v*-rc* → develop
+          #   else → main
+          if [ -z "$BRANCH" ]; then
+            if [[ "$TAG_VERSION" =~ (a|b|rc)[0-9]*$ ]]; then
+              BRANCH="develop"
+            else
+              BRANCH="main"
+            fi
+            echo "::notice::Detached HEAD, inferred branch from tag: $BRANCH"
+          fi
 
           echo "Tag: v$TAG_VERSION"
           echo "Branch: $BRANCH"
           echo "Is prerelease: $IS_PRERELEASE"
-
-          if [ -z "$BRANCH" ]; then
-            echo "::error::Tag is not on main or develop branch"
-            exit 1
-          fi
 
           if [ "$BRANCH" = "develop" ] && [ "$IS_PRERELEASE" = "false" ]; then
             echo "::error::develop branch only allows pre-release tags (a/b/rc), got v$TAG_VERSION"
@@ -62,9 +69,9 @@ jobs:
           echo "Tag validation passed"
 
   # ============================================================
-  # Build: 构建并检查包
+  # Test: 运行测试套件，防止发布有问题的版本
   # ============================================================
-  build:
+  test:
     needs: validate
     runs-on: ubuntu-latest
     steps:
@@ -74,14 +81,41 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install build tools
-        run: pip install build twine
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install with dev deps
+        run: uv sync --python "3.12"
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -v
+
+  # ============================================================
+  # Build: 构建并检查包
+  # ============================================================
+  build:
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Build package
-        run: python -m build
+        run: uv build
 
       - name: Check package
-        run: twine check dist/*
+        run: uvx twine check dist/*
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -105,7 +139,12 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          enable-cache: true
+
+      - name: Publish to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: uv publish

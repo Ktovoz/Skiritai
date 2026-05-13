@@ -49,8 +49,9 @@ from skiritai.core import (
     list_yaml_cases,
 )
 from skiritai.events import Event, EventBus, event_bus
+from skiritai.llm import create_llm, load_env
 
-__version__ = "0.0.2"
+__version__ = "0.0.6a"
 
 __all__ = [
     # Case framework
@@ -68,6 +69,9 @@ __all__ = [
     "Event",
     "EventBus",
     "event_bus",
+    # LLM factory
+    "create_llm",
+    "load_env",
     # Runner
     "run_case",
     "discover_case_class",

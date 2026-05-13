@@ -17,7 +17,9 @@ def discover_case_class(case_dir: Path) -> type[BaseCase]:
     """
     case_file = case_dir / "case.py"
     if not case_file.exists():
-        raise FileNotFoundError(f"Case file not found: {case_file}")
+        has_yaml = (case_dir / "case.yaml").is_file() or (case_dir / "case.yml").is_file()
+        hint = f" Found case.yaml — use 'skiritai run {case_dir}' to auto-detect YAML." if has_yaml else " Create a case.py or case.yaml in this directory."
+        raise FileNotFoundError(f"No case.py found in {case_dir}.{hint}")
 
     # Load the module
     spec = importlib.util.spec_from_file_location(f"case_{case_dir.name}", case_file)
@@ -42,6 +44,8 @@ async def run_case(
         on_log=None,
         execution_id: str | None = None,
         results_dir: Path | None = None,
+        llm=None,
+        step_filter: list[str] | None = None,
 ) -> dict:
     """Run a Python-based test case.
 
@@ -50,6 +54,8 @@ async def run_case(
         on_log: Optional callback for real-time log streaming
         execution_id: Execution identifier for event publishing
         results_dir: Optional directory for saving screenshots/results
+        llm: Optional LLM provider instance. If None, auto-detects from env.
+        step_filter: Optional list of step names to run. None = run all.
 
     Returns:
         dict with case_name, status, total_steps, success_count, failed_count, steps
@@ -59,11 +65,12 @@ async def run_case(
         case_dir=case_dir,
         execution_id=execution_id or case_dir.name,
         results_dir=results_dir,
+        llm=llm,
     )
 
     logger.info(f"[PyRunner] Running {case_class.__name__} from {case_dir}")
 
-    report = await case_instance.run()
+    report = await case_instance.run(step_filter=step_filter)
     return report
 
 

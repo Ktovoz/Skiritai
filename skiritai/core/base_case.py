@@ -20,6 +20,7 @@ from skiritai.core.browser import (
 from skiritai.core.case_context import CaseContext
 from skiritai.events import Event, event_bus
 from skiritai.logger import logger
+from skiritai.core.notify import notify_if_configured
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +204,7 @@ class BaseCase:
     # results directory.  Set to True to keep disk usage low in CI pipelines.
     cleanup_temp_screenshots: bool = False
 
-    def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None):
+    def __init__(self, case_dir: Path | None = None, execution_id: str | None = None, results_dir: Path | None = None, llm=None):
         self._case_dir = case_dir or Path(inspect.getfile(self.__class__)).parent
         self._execution_id = execution_id or "default"
         self._results_dir = results_dir
@@ -216,6 +217,9 @@ class BaseCase:
 
         # Per-case headless override: None = use env var, True/False = explicit
         self.headless: bool | None = None
+
+        # LLM provider — threaded through _make_ai → AIContext → run_agent
+        self._llm = llm
 
         # Global context — state machine + store + browser session info
         self._ctx = CaseContext(
@@ -442,6 +446,8 @@ class BaseCase:
         in the sequence they should run.
         """
         steps = []
+        user_cls = type(self)
+        warned_reserved: set[str] = set()
         # Walk MRO in reverse so base classes come first, subclass overrides last.
         # Within each class, __dict__ preserves definition order (Python 3.7+).
         seen = set()
@@ -450,6 +456,15 @@ class BaseCase:
                 if name.startswith("_"):
                     continue
                 if name in self._RESERVED_METHODS:
+                    # Warn if the user's own class defines a reserved name
+                    if cls is user_cls and name not in warned_reserved:
+                        logger.warning(
+                            f"[BaseCase] Method '{name}' in {user_cls.__name__} "
+                            f"matches a reserved method name and will be skipped "
+                            f"during step discovery. Reserved names: "
+                            f"{sorted(self._RESERVED_METHODS)}"
+                        )
+                        warned_reserved.add(name)
                     continue
                 if name in seen:
                     continue
@@ -478,6 +493,7 @@ class BaseCase:
             default_mode=default_mode,
             execution_id=self._execution_id,
             max_steps=effective_max_steps,
+            llm=self._llm,
         )
 
     async def run_step(self, step_name: str, on_log=None) -> dict:
@@ -629,18 +645,29 @@ class BaseCase:
             return (policy, max_retries)
         return (FailurePolicy.ABORT, 1)
 
-    async def run(self) -> dict:
+    async def run(self, step_filter: list[str] | None = None) -> dict:
         """Run the full case: setup → steps → teardown.
 
         Supports three failure policies per step (via @on_failure decorator):
         - ABORT: stop execution on failure (default)
         - SKIP: skip the failed step and continue
         - RETRY: retry the step up to max_retries times, then abort
+
+        Args:
+            step_filter: Optional list of step names to run. None = run all.
         """
         logger.info(f"[Case] {self.__class__.__name__}")
 
-        steps = self.get_step_methods()
-        logger.info(f"[Case] Steps: {steps}")
+        all_steps = self.get_step_methods()
+        if step_filter:
+            unknown = [s for s in step_filter if s not in all_steps]
+            if unknown:
+                logger.warning(f"[Case] Unknown steps ignored: {unknown}")
+            steps = [s for s in all_steps if s in step_filter]
+            logger.info(f"[Case] Steps (filtered): {steps} (from {len(all_steps)} total)")
+        else:
+            steps = all_steps
+            logger.info(f"[Case] Steps: {steps}")
 
         await event_bus.publish(Event(
             type="execution_started",
@@ -725,7 +752,7 @@ class BaseCase:
         await self._ctx.transition("done" if status == "completed" else "failed")
         self._ctx.save_snapshot()
 
-        report = self._build_report(status=status)
+        report = self._build_report(status=status, total_steps_override=len(steps))
 
         # Save report to disk (test_results/<timestamp>/report.json + report.md)
         self._save_report(report)
@@ -741,25 +768,29 @@ class BaseCase:
             data={"report": report},
         ))
 
+        # Fire-and-forget notification (non-blocking, best-effort)
+        notify_if_configured(report)
+
         return report
 
-    def _build_report(self, status: str, error: str | None = None) -> dict:
+    def _build_report(self, status: str, error: str | None = None, total_steps_override: int | None = None) -> dict:
         """Build the final execution report."""
-        total = len(self.get_step_methods())
+        from skiritai.core.report_builder import normalize_report
+        total = total_steps_override if total_steps_override is not None else len(self.get_step_methods())
         success_count = len(self._ctx.completed_steps)
-        report: dict[str, Any] = {
+        raw: dict[str, Any] = {
             "case_name": self.__class__.__name__,
             "status": status,
+            "source": "python",
             "total_steps": total,
             "success_count": success_count,
             "failed_count": total - success_count,
             "steps": self._results,
-            "phase": self._ctx.phase.value,
             "elapsed_seconds": self._ctx.elapsed_seconds,
         }
         if error:
-            report["error"] = error
-        return report
+            raw["error"] = error
+        return normalize_report(raw)
 
     @staticmethod
     def _format_duration(seconds: float) -> str:
@@ -770,32 +801,14 @@ class BaseCase:
 
     # ---- Report rendering ----
 
-    # Cached HTML template (loaded once per process lifetime)
-    _template_html: str | None = None
-
-    @classmethod
-    def _load_template(cls) -> str | None:
-        """Load the Vue + Ant Design report template, cached in memory."""
-        if cls._template_html is not None:
-            return cls._template_html
-
-        template_paths = [
-            Path(__file__).parent.parent.parent / "report" / "dist" / "index.html",
-            Path(__file__).parent / "templates" / "report.html",
-        ]
-        for tp in template_paths:
-            if tp.exists():
-                cls._template_html = tp.read_text(encoding="utf-8")
-                return cls._template_html
-        return None
-
     @staticmethod
     def _render_html(report: dict) -> str:
         """Render the report using the Vue + Ant Design SPA template."""
         import base64
         import json
 
-        template_html = BaseCase._load_template()
+        from skiritai.core._session import _load_template
+        template_html = _load_template()
 
         if template_html is None:
             return f"<html><body><pre>{json.dumps(report, ensure_ascii=False, indent=2)}</pre></body></html>"
@@ -817,7 +830,7 @@ class BaseCase:
 
     def _save_report(self, report: dict) -> None:
         """Save report.json and report.html to the results directory."""
-        import json, re, shutil
+        import re, shutil
         from datetime import datetime
 
         results_dir = self._results_dir or (self._case_dir / "test_results")
@@ -836,7 +849,11 @@ class BaseCase:
             for s in step.get("screenshots", []):
                 try:
                     screenshots_dir.mkdir(parents=True, exist_ok=True)
-                    src = Path(s["path"])
+                    spath = s.get("path", "")
+                    if not spath or spath.startswith("data:"):
+                        new_paths.append(s)
+                        continue
+                    src = Path(spath)
                     dst = screenshots_dir / f"{step['step_id']}_{s['name']}.png"
                     if src.exists():
                         shutil.copy2(src, dst)
@@ -851,13 +868,16 @@ class BaseCase:
                     pass
             step["screenshots"] = new_paths
 
-        # JSON report (machine-readable)
+        # Delegate JSON + HTML saving to shared utility
+        from skiritai.core._session import save_report as _shared_save
+        # Temporarily override base_dir to point to the already-created ts_dir's parent
+        # by passing ts_dir directly as if it's the base dir (the shared fn creates a subdir)
+        # Instead, save directly to ts_dir
+        import json as _json
         (ts_dir / "report.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2),
+            _json.dumps(report, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-
-        # HTML report (human-readable, rendered from template)
         (ts_dir / "report.html").write_text(
             self._render_html(report),
             encoding="utf-8",

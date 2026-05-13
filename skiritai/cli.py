@@ -4,6 +4,9 @@ Usage:
     skiritai run <case_dir>          Run a test case
     skiritai serve [--host] [--port]  Start the web server (requires [web] extra)
     skiritai list [cases_root]        List available test cases
+    skiritai config show              Display current effective LLM config
+    skiritai config check             Verify LLM config by making a test call
+    skiritai config init              Generate a skiritai.toml template
     skiritai browser status [dir]     Check persistent browser session status
     skiritai browser cleanup [dir]    Kill orphan browser and remove session file
 """
@@ -24,10 +27,23 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # --- run ---
-    run_parser = subparsers.add_parser("run", help="Run a test case")
-    run_parser.add_argument("case_dir", type=str, help="Path to case directory containing case.py")
+    run_parser = subparsers.add_parser("run", help="Run one or more test cases")
+    run_parser.add_argument("case_dir", type=str, nargs="+", help="Path(s) to case directory(ies) containing case.py/case.yaml")
     run_parser.add_argument("--results-dir", type=str, default=None,
                             help="Directory to save test results (default: <case_dir>/test_results)")
+    run_parser.add_argument("--env-file", type=str, default=None,
+                            help="Path to .env file to load before running")
+    run_parser.add_argument("--config", type=str, default=None,
+                            help="Path to skiritai.toml or skiritai.yaml config file")
+    run_parser.add_argument("--llm", type=str, default=None,
+                            help="LLM provider name (openai, anthropic)")
+    run_parser.add_argument("--model", type=str, default=None,
+                            help="LLM model name")
+    run_parser.add_argument("--steps", type=str, default=None,
+                            help="Comma-separated step names to run (e.g. 'step1,step3'). "
+                                 "Default: run all steps.")
+    run_parser.add_argument("--parallel", action="store_true",
+                            help="Run multiple cases in parallel (requires --steps for isolation)")
 
     # --- serve ---
     serve_parser = subparsers.add_parser("serve", help="Start the web server (requires [web] extra)")
@@ -41,6 +57,13 @@ def main():
     list_parser = subparsers.add_parser("list", help="List available test cases")
     list_parser.add_argument("cases_root", type=str, nargs="?", default="examples",
                              help="Root directory containing case folders (default: examples)")
+
+    # --- config ---
+    config_parser = subparsers.add_parser("config", help="LLM configuration diagnostics")
+    config_sub = config_parser.add_subparsers(dest="config_command", help="Config commands")
+    config_sub.add_parser("show", help="Display current effective LLM configuration")
+    config_sub.add_parser("check", help="Verify LLM config by making a test call")
+    config_sub.add_parser("init", help="Generate a skiritai.toml template in current directory")
 
     # --- browser ---
     browser_parser = subparsers.add_parser("browser", help="Manage persistent browser sessions")
@@ -64,6 +87,8 @@ def main():
         _cmd_serve(args)
     elif args.command == "list":
         _cmd_list(args)
+    elif args.command == "config":
+        _cmd_config(args)
     elif args.command == "browser":
         _cmd_browser(args)
 
@@ -74,45 +99,120 @@ def _cmd_run(args):
     Detection priority when both case.py and case.yaml exist: Python wins.
     Use ``run_yaml_case()`` in Python code to explicitly run a YAML case.
     """
-    from dotenv import load_dotenv
-    load_dotenv()
+    from skiritai.llm._factory import load_env, create_llm
+
+    # 1. Load .env if specified
+    if getattr(args, "env_file", None):
+        load_env(args.env_file)
+
+    # 2. Create provider from CLI args if any LLM-related args given
+    llm = None
+    has_llm_args = (
+        getattr(args, "llm", None)
+        or getattr(args, "model", None)
+        or getattr(args, "config", None)
+    )
+    if has_llm_args:
+        llm = create_llm(
+            provider=getattr(args, "llm", None),
+            model=getattr(args, "model", None),
+            from_file=getattr(args, "config", None),
+        )
 
     from skiritai.core.agent_loop import register_all_tools
     register_all_tools()
 
-    case_dir = Path(args.case_dir).resolve()
-    if not case_dir.exists():
-        print(f"Error: case directory not found: {case_dir}")
-        sys.exit(1)
+    case_dirs = [Path(d).resolve() for d in args.case_dir]
+    for d in case_dirs:
+        if not d.exists():
+            print(f"Error: case directory not found: {d}")
+            sys.exit(1)
 
     results_dir = Path(args.results_dir).resolve() if args.results_dir else None
 
-    # Detection priority: case.py > case.yaml/case.yml.
-    # When both exist, Python is preferred. Use run_yaml_case() to force YAML.
-    has_yaml = (case_dir / "case.yaml").is_file() or (case_dir / "case.yml").is_file()
-    has_py = (case_dir / "case.py").is_file()
+    # Live progress callback for CLI
+    import sys as _sys
 
-    if has_yaml and not has_py:
-        from skiritai.core.yaml_runner import run_yaml_case
-        report = asyncio.run(run_yaml_case(case_dir, results_dir=results_dir))
+    def _on_log(msg: str) -> None:
+        display = msg[:120] + "..." if len(msg) > 120 else msg
+        _sys.stderr.write(f"  {display}\n")
+        _sys.stderr.flush()
+
+    step_filter = (
+        [s.strip() for s in args.steps.split(",") if s.strip()]
+        if getattr(args, "steps", None) else None
+    )
+    parallel = getattr(args, "parallel", False)
+    error_exit = False
+
+    async def _run_one(case_dir: Path) -> dict:
+        has_yaml = (case_dir / "case.yaml").is_file() or (case_dir / "case.yml").is_file()
+        has_py = (case_dir / "case.py").is_file()
+
+        if has_yaml and not has_py:
+            from skiritai.core.yaml_runner import run_yaml_case
+            return await run_yaml_case(
+                case_dir, results_dir=results_dir, llm=llm,
+                on_log=_on_log, step_filter=step_filter,
+            )
+        else:
+            from skiritai.core.runner import run_case
+            return await run_case(
+                case_dir, results_dir=results_dir, llm=llm,
+                on_log=_on_log, step_filter=step_filter,
+            )
+
+    # ---- Execute ----
+    if parallel and len(case_dirs) > 1:
+        async def _run_parallel():
+            tasks = [_run_one(d) for d in case_dirs]
+            return await asyncio.gather(*tasks, return_exceptions=True)
+
+        results = asyncio.run(_run_parallel())
+        reports = []
+        for d, r in zip(case_dirs, results):
+            if isinstance(r, Exception):
+                print(f"\nError running {d.name}: {r}")
+                reports.append({"case_name": d.name, "status": "failed", "error": str(r)})
+            else:
+                reports.append(r)
     else:
-        from skiritai.core.runner import run_case
-        report = asyncio.run(run_case(case_dir, results_dir=results_dir))
+        reports = []
+        for d in case_dirs:
+            try:
+                reports.append(asyncio.run(_run_one(d)))
+            except (FileNotFoundError, ValueError) as e:
+                print(f"Error: {e}")
+                print(f"Hint: A case directory must contain either case.py or case.yaml/case.yml.")
+                print(f"      Directory: {d}")
+                error_exit = True
 
-    # Print report
-    print(f"\n{'=' * 60}")
-    print(f"Case: {report.get('case_name')}")
-    print(f"Status: {report.get('status')}")
-    print(f"Steps: {report.get('success_count', 0)}/{report.get('total_steps', 0)} passed")
-    if report.get("elapsed_seconds"):
-        print(f"Elapsed: {report['elapsed_seconds']}s")
-    print(f"{'=' * 60}")
+    # ---- Print results ----
+    for report in reports:
+        print(f"\n{'=' * 60}")
+        print(f"Case: {report.get('case_name')}")
+        print(f"Status: {report.get('status')}")
+        sc = report.get("success_count", 0)
+        total = report.get("total_steps", 0)
+        print(f"Steps: {sc}/{total} passed")
+        if report.get("elapsed_seconds"):
+            print(f"Elapsed: {report['elapsed_seconds']}s")
+        print(f"{'=' * 60}")
 
-    for step in report.get("steps", []):
-        icon = "✓" if step["status"] == "success" else "✗"
-        print(f"  {icon} {step['step_id']} ({step.get('mode', '')}) — {step.get('summary', '')}")
+        for step in report.get("steps", []):
+            icon = "✓" if step["status"] == "success" else "✗"
+            print(f"  {icon} {step['step_id']} ({step.get('mode', '')}) — {step.get('summary', '')}")
 
-    sys.exit(0 if report.get("status") == "completed" else 1)
+        if report.get("status") != "completed":
+            error_exit = True
+
+    if len(reports) > 1:
+        print(f"\n{'=' * 60}")
+        passed = sum(1 for r in reports if r.get("status") == "completed")
+        print(f"Summary: {passed}/{len(reports)} cases passed")
+        print(f"{'=' * 60}")
+
+    sys.exit(1 if error_exit else 0)
 
 
 def _cmd_serve(args):
@@ -157,7 +257,16 @@ def _cmd_list(args):
         steps = c.get("steps", [])
         if steps and isinstance(steps, list):
             if isinstance(steps[0], str):
-                print(f"    Steps: {', '.join(steps)}")
+                # Python steps: check replay script status per step
+                case_dir = Path(c["dir"])
+                scripts_dir = case_dir / "scripts"
+                step_status = []
+                for s_name in steps:
+                    if (scripts_dir / f"{s_name}.py").exists():
+                        step_status.append(f"{s_name} [replay]")
+                    else:
+                        step_status.append(f"{s_name} [ai]")
+                print(f"    Steps: {', '.join(step_status)}")
             elif isinstance(steps[0], dict):
                 step_summaries = []
                 for s in steps:
@@ -171,6 +280,90 @@ def _cmd_list(args):
         else:
             print(f"    Steps: (none)")
         print()
+
+
+def _cmd_config(args):
+    """Handle config subcommand (show / check / init)."""
+    if not getattr(args, "config_command", None):
+        print("Usage: skiritai config {show|check|init}")
+        sys.exit(1)
+
+    if args.config_command == "show":
+        _config_show()
+    elif args.config_command == "check":
+        _config_check()
+    elif args.config_command == "init":
+        _config_init()
+
+
+def _config_show():
+    """Display current effective LLM configuration."""
+    from skiritai.llm._factory import _resolve_config
+
+    cfg, config_file = _resolve_config()
+
+    print("Effective LLM Configuration:")
+    print(f"  Config file: {config_file or '(none)'}")
+    print(f"  Provider:    {cfg.provider or '(auto-detect)'}")
+    print(f"  API key:     {_mask_key(cfg.api_key)}")
+    print(f"  Base URL:    {cfg.base_url or '(default)'}")
+    print(f"  Model:       {cfg.model or '(default)'}")
+    print(f"  Temperature: {cfg.temperature or '(default)'}")
+    print(f"  Max tokens:  {cfg.max_tokens or '(default)'}")
+
+
+def _config_check():
+    """Verify LLM config by attempting to create and build a provider."""
+    from skiritai.llm._factory import create_llm
+
+    try:
+        provider = create_llm()
+        llm = provider.build()
+        print(f"Provider: {provider.name}")
+        print(f"Model:    {getattr(llm, 'model_name', 'N/A')}")
+        print("Configuration is valid.")
+    except Exception as e:
+        print(f"Configuration error: {e}")
+        sys.exit(1)
+
+
+def _config_init():
+    """Generate a skiritai.toml template in current directory."""
+    target = Path.cwd() / "skiritai.toml"
+    if target.exists():
+        print(f"skiritai.toml already exists in {Path.cwd()}")
+        sys.exit(1)
+
+    template = """\
+[llm]
+# LLM provider: "openai" or "anthropic" (omit for auto-detect)
+# provider = "openai"
+
+# API key (supports ${VAR} env var references)
+# api_key = "${OPENAI_API_KEY}"
+
+# Custom API base URL (optional, for proxy/custom endpoints)
+# base_url = "https://api.openai.com/v1"
+
+# Model name (omit for provider default)
+# model = "gpt-4o"
+
+# Generation parameters (optional)
+# temperature = 0.2
+# max_tokens = 4096
+"""
+    target.write_text(template, encoding="utf-8")
+    print(f"Created {target}")
+    print("Edit the file to configure your LLM provider.")
+
+
+def _mask_key(key: str | None) -> str:
+    """Mask an API key for display, showing first 4 and last 4 chars."""
+    if not key:
+        return "(not set)"
+    if len(key) <= 12:
+        return "****"
+    return f"{key[:4]}...{key[-4:]}"
 
 
 def _cmd_browser(args):

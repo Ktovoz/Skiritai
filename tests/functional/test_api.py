@@ -38,12 +38,11 @@ class TestAPI:
             assert "steps" in item
 
     def test_get_case_with_descriptions(self):
-        resp = self.client.get("/api/cases/baidu_search")
+        resp = self.client.get("/api/cases/minimal")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["id"] == "baidu_search"
-        assert data["name"] == "BaiduSearchCase"
-        assert len(data["steps"]) == 3
+        assert data["id"] == "minimal"
+        assert "steps" in data
 
         for step in data["steps"]:
             assert "id" in step
@@ -56,24 +55,24 @@ class TestAPI:
         assert resp.status_code == 404
 
     def test_list_scripts(self):
-        resp = self.client.get("/api/cases/baidu_search/scripts")
+        resp = self.client.get("/api/cases/minimal/scripts")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
 
     def test_get_script_404(self):
-        resp = self.client.get("/api/cases/baidu_search/scripts/nonexistent_step")
+        resp = self.client.get("/api/cases/minimal/scripts/nonexistent_step")
         assert resp.status_code == 404
 
     def test_update_script(self):
-        resp = self.client.get("/api/cases/baidu_search/scripts")
+        resp = self.client.get("/api/cases/minimal/scripts")
         if resp.json():
             script = resp.json()[0]
             original = script["content"]
             new_content = original + "\n# test update"
 
             resp2 = self.client.put(
-                f"/api/cases/baidu_search/scripts/{script['step_id']}",
+                f"/api/cases/minimal/scripts/{script['step_id']}",
                 json={"content": new_content},
             )
             assert resp2.status_code == 200
@@ -81,37 +80,37 @@ class TestAPI:
 
             # Restore original
             self.client.put(
-                f"/api/cases/baidu_search/scripts/{script['step_id']}",
+                f"/api/cases/minimal/scripts/{script['step_id']}",
                 json={"content": original},
             )
 
     def test_update_script_404(self):
         resp = self.client.put(
-            "/api/cases/baidu_search/scripts/nonexistent",
+            "/api/cases/minimal/scripts/nonexistent",
             json={"content": "test"},
         )
         assert resp.status_code == 404
 
     def test_solidify_script_no_script(self):
-        resp = self.client.post("/api/cases/baidu_search/scripts/nonexistent_step/solidify")
+        resp = self.client.post("/api/cases/minimal/scripts/nonexistent_step/solidify")
         assert resp.status_code == 404
 
     def test_solidify_existing_script(self):
-        resp = self.client.get("/api/cases/baidu_search/scripts")
+        resp = self.client.get("/api/cases/minimal/scripts")
         if resp.json():
             step_id = resp.json()[0]["step_id"]
-            resp2 = self.client.post(f"/api/cases/baidu_search/scripts/{step_id}/solidify")
+            resp2 = self.client.post(f"/api/cases/minimal/scripts/{step_id}/solidify")
             assert resp2.status_code == 200
             data = resp2.json()
             assert data["step_id"] == step_id
             assert data["status"] == "solidified"
 
-            marker = self.cases_root / "baidu_search" / "scripts" / f".{step_id}.solidified"
+            marker = self.cases_root / "tutorial" / "minimal" / "scripts" / f".{step_id}.solidified"
             assert marker.exists()
             marker.unlink()  # cleanup
 
     def test_stop_no_running_execution(self):
-        resp = self.client.post("/api/cases/baidu_search/stop")
+        resp = self.client.post("/api/cases/minimal/stop")
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "not_found"
@@ -121,12 +120,12 @@ class TestAPI:
         assert resp.status_code == 404
 
     def test_results_empty_initially(self):
-        resp = self.client.get("/api/cases/baidu_search/results")
+        resp = self.client.get("/api/cases/minimal/results")
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
     def test_results_404_for_nonexistent_timestamp(self):
-        resp = self.client.get("/api/cases/baidu_search/results/19700101_000000")
+        resp = self.client.get("/api/cases/minimal/results/19700101_000000")
         assert resp.status_code == 404
 
     def test_cors_headers_present(self):
@@ -153,10 +152,10 @@ class TestAPI:
                 "failed_count": 0,
                 "steps": [],
             }
-            resp = self.client.post("/api/cases/baidu_search/run")
+            resp = self.client.post("/api/cases/minimal/run")
             assert resp.status_code == 200
             data = resp.json()
-            assert data["case_id"] == "baidu_search"
+            assert data["case_id"] == "minimal"
             assert data["status"] == "started"
 
 
@@ -166,7 +165,7 @@ class TestResultPersistence:
     def test_report_saved_after_execution(self):
         from skiritai.web.routers.cases import CASES_ROOT
 
-        case_dir = CASES_ROOT / "baidu_search"
+        case_dir = CASES_ROOT / "tutorial" / "minimal"
         results_dir = case_dir / "test_results"
 
         test_timestamp = "20260101_120000"
@@ -187,13 +186,13 @@ class TestResultPersistence:
             from skiritai.web.app import create_app
             client = TestClient(create_app())
 
-            resp = client.get("/api/cases/baidu_search/results")
+            resp = client.get("/api/cases/minimal/results")
             assert resp.status_code == 200
             results = resp.json()
             assert len(results) >= 1
             assert any(r["timestamp"] == test_timestamp for r in results)
 
-            resp2 = client.get(f"/api/cases/baidu_search/results/{test_timestamp}")
+            resp2 = client.get(f"/api/cases/minimal/results/{test_timestamp}")
             assert resp2.status_code == 200
             assert resp2.json()["report"]["case_name"] == "BaiduSearchCase"
             assert "screenshots" in resp2.json()

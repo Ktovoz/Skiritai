@@ -1,6 +1,7 @@
 """Functional tests for AIContext — no browser/LLM required."""
 from __future__ import annotations
 
+import ast
 import asyncio
 import tempfile
 from pathlib import Path
@@ -30,6 +31,7 @@ class TestAIContext:
 
     def test_mode_auto_replays_when_script_exists(self):
         from skiritai.core.ai_context import AIContext
+        from skiritai.core.ai_context import _compute_script_hash, SCRIPT_HASH_SUFFIX
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "mycase"
@@ -38,9 +40,11 @@ class TestAIContext:
 
             # Write a valid replay script
             ctx.scripts_dir.mkdir(parents=True, exist_ok=True)
-            ctx.script_path.write_text(
-                "async def run(page, context):\n    pass\n"
-            )
+            script_content = "async def run(page, context):\n    pass\n"
+            ctx.script_path.write_text(script_content)
+            # Write the integrity hash so _verify_script passes
+            hash_path = Path(str(ctx.script_path) + SCRIPT_HASH_SUFFIX)
+            hash_path.write_text(_compute_script_hash(script_content))
 
             result = asyncio.run(ctx.action("do something", mode="auto"))
             assert result["success"] is True
@@ -132,6 +136,7 @@ class TestAIContext:
 
     def test_replay_script_with_error_returns_failure(self):
         from skiritai.core.ai_context import AIContext
+        from skiritai.core.ai_context import _compute_script_hash, SCRIPT_HASH_SUFFIX
 
         with tempfile.TemporaryDirectory() as tmpdir:
             case_dir = Path(tmpdir) / "mycase"
@@ -140,10 +145,179 @@ class TestAIContext:
 
             # Write a script that raises
             ctx.scripts_dir.mkdir(parents=True, exist_ok=True)
-            ctx.script_path.write_text(
-                "async def run(page, context):\n    raise RuntimeError('test error')\n"
-            )
+            script_content = "async def run(page, context):\n    raise RuntimeError('test error')\n"
+            ctx.script_path.write_text(script_content)
+            # Write the integrity hash so _verify_script passes
+            hash_path = Path(str(ctx.script_path) + SCRIPT_HASH_SUFFIX)
+            hash_path.write_text(_compute_script_hash(script_content))
 
             result = asyncio.run(ctx._replay())
             assert result["success"] is False
             assert "test error" in result["summary"]
+
+
+class TestASTSandbox:
+    """Unit tests for replay script AST validation — blocking sandbox bypass."""
+
+    def test_block_getattr_called_as_forbidden_builtin(self):
+        """getattr() is a forbidden builtin — calling it directly must raise."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "getattr(__builtins__, 'eval')"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden builtin"):
+            _validate_replay_ast(tree)
+
+    def test_block_setattr_called_as_forbidden_builtin(self):
+        """setattr() is a forbidden builtin — calling it directly must raise."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "setattr(obj, '__class__', x)"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden builtin"):
+            _validate_replay_ast(tree)
+
+    def test_block_delattr_called_as_forbidden_builtin(self):
+        """delattr() is a forbidden builtin — calling it directly must raise."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "delattr(obj, 'attr')"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden builtin"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_builtins_attribute_access(self):
+        """Accessing .__builtins__ attribute is blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "x.__builtins__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_class_attribute_access(self):
+        """Accessing .__class__ attribute is blocked (sandbox escape vector)."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "obj.__class__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_subclasses_attribute_access(self):
+        """Accessing .__subclasses__ attribute is blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "type.__subclasses__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_dict_attribute_access(self):
+        """Accessing .__dict__ attribute is blocked (obj introspection)."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "obj.__dict__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_globals_attribute_access(self):
+        """Accessing .__globals__ attribute is blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "func.__globals__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_code_attribute_access(self):
+        """Accessing .__code__ attribute is blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "func.__code__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_bases_attribute_access(self):
+        """Accessing .__bases__ attribute is blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "cls.__bases__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_mro_attribute_access(self):
+        """Accessing .__mro__ attribute is blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "cls.__mro__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_func_attribute_access(self):
+        """Accessing .__func__ attribute is blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "method.__func__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_self_attribute_access(self):
+        """Accessing .__self__ attribute is blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "method.__self__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_block_dunder_module_attribute_access(self):
+        """Accessing .__module__ attribute is blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "func.__module__"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)
+
+    def test_allow_safe_attribute_access(self):
+        """Normal attribute access (e.g., page.click()) must be allowed."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "page.click('#btn')\npage.fill('#input', 'hello')"
+        tree = ast.parse(code)
+        # Should not raise
+        _validate_replay_ast(tree)
+
+    def test_allow_basic_function_calls(self):
+        """Standard function calls like print(), len() must be allowed."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "print('hello')\nx = len([1, 2, 3])"
+        tree = ast.parse(code)
+        # Should not raise
+        _validate_replay_ast(tree)
+
+    def test_block_getattr_bypass_pattern(self):
+        """getattr(__builtins__, 'ev'+'al') — indirect eval access must be blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "getattr(__builtins__, 'eval')"
+        tree = ast.parse(code)
+        with pytest.raises(ValueError, match="Forbidden builtin"):
+            _validate_replay_ast(tree)
+
+    def test_block_subclasses_escape_chain(self):
+        """__class__.__subclasses__() chain — common sandbox escape must be blocked."""
+        from skiritai.core.ai_context import _validate_replay_ast
+
+        code = "x.__class__.__subclasses__()"
+        tree = ast.parse(code)
+        # The first forbidden attr found should trigger the error
+        with pytest.raises(ValueError, match="Forbidden attribute access"):
+            _validate_replay_ast(tree)

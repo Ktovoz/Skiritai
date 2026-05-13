@@ -1,6 +1,7 @@
 """AI Action context — manages replay scripts and agent execution."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -18,6 +19,58 @@ ActionMode = Literal["auto", "explore", "replay"]
 
 SCRIPT_HASH_SUFFIX = ".sha256"
 
+# AST nodes allowed in replay scripts — blocks imports, exec, eval, etc.
+_ALLOWED_AST_NODES = frozenset({
+    ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.arguments, ast.arg,
+    ast.Expr, ast.Constant, ast.Name, ast.Load, ast.Store, ast.Del,
+    ast.Attribute, ast.Call, ast.keyword, ast.Assign, ast.AnnAssign,
+    ast.AugAssign, ast.Return, ast.Pass, ast.Raise, ast.Assert,
+    ast.If, ast.For, ast.While, ast.Break, ast.Continue, ast.Try,
+    ast.ExceptHandler, ast.With, ast.withitem, ast.Compare, ast.BoolOp,
+    ast.BinOp, ast.UnaryOp, ast.IfExp, ast.Dict, ast.List, ast.Tuple,
+    ast.Set, ast.Subscript, ast.Slice, ast.Starred, ast.JoinedStr,
+    ast.FormattedValue, ast.Await, ast.Global, ast.Nonlocal,
+})
+_FORBIDDEN_BUILTINS = frozenset({
+    "exec", "eval", "compile", "__import__", "open", "input",
+    "breakpoint", "memoryview", "help",
+    # Prevent sandbox bypass via getattr(__builtins__, ...) etc.
+    "getattr", "setattr", "delattr",
+})
+# Attribute names that must not be accessed (prevents object introspection escapes)
+_FORBIDDEN_ATTRS = frozenset({
+    "__builtins__", "__class__", "__bases__", "__subclasses__",
+    "__mro__", "__globals__", "__code__", "__func__", "__self__",
+    "__dict__", "__module__",
+})
+
+
+def _validate_replay_ast(tree: ast.AST) -> None:
+    """Validate that a replay script AST contains only safe node types.
+
+    Raises ValueError if unsafe constructs (imports, exec, eval, etc.) are found.
+    """
+    for node in ast.walk(tree):
+        if type(node) not in _ALLOWED_AST_NODES:
+            raise ValueError(
+                f"Unsafe AST node in replay script: {type(node).__name__}. "
+                f"Script may only use basic control flow and function calls."
+            )
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            raise ValueError("Import statements are not allowed in replay scripts")
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id in _FORBIDDEN_BUILTINS:
+                raise ValueError(
+                    f"Forbidden builtin function '{node.func.id}' in replay script"
+                )
+        # Block attribute access to dangerous dunder attrs:
+        #   __builtins__.__class__.__subclasses__() etc.
+        if isinstance(node, ast.Attribute):
+            if isinstance(node.attr, str) and node.attr in _FORBIDDEN_ATTRS:
+                raise ValueError(
+                    f"Forbidden attribute access: '.{node.attr}' in replay script"
+                )
+
 
 def _compute_script_hash(content: str) -> str:
     """Compute SHA256 hash of script content."""
@@ -27,13 +80,17 @@ def _compute_script_hash(content: str) -> str:
 def _verify_script(script_path: Path) -> bool:
     """Verify the script file matches its stored hash.
 
-    Returns True if the hash file exists and matches, or if no hash file
-    exists (backward-compatible with pre-hash scripts).
+    Returns True only if the hash file exists and matches.
+    Scripts without hash files are rejected (backward compatibility:
+    re-run the step in explore mode to regenerate with hash).
     """
     hash_path = Path(str(script_path) + SCRIPT_HASH_SUFFIX)
     if not hash_path.exists():
-        # Backward compatible: scripts saved before hash verification was added
-        return True
+        logger.warning(
+            f"[Security] Replay script has no integrity hash: {script_path}. "
+            f"Re-run this step in explore or auto mode to generate the hash."
+        )
+        return False
 
     content = script_path.read_text(encoding="utf-8")
     expected = hash_path.read_text(encoding="utf-8").strip()
@@ -77,6 +134,7 @@ class AIContext:
             default_mode: ActionMode = "auto",
             execution_id: str = "default",
             max_steps: int = 20,
+            llm=None,
     ):
         self.page = page
         self.case_dir = case_dir
@@ -85,6 +143,7 @@ class AIContext:
         self.default_mode = default_mode
         self.execution_id = execution_id
         self.max_steps = max_steps
+        self._llm = llm
         self.scripts_dir = case_dir / "scripts"
         self.scripts_dir.mkdir(parents=True, exist_ok=True)
         self._last_result: dict | None = None
@@ -154,6 +213,7 @@ class AIContext:
         """Run an AI-powered assertion to verify a condition on the page.
 
         Unlike action(), this is designed for boolean pass/fail checks.
+        Uses a single LLM call (no agent loop) — fast and token-efficient.
         On pass: logs with logger.success (green).
         On fail: logs with logger.warning (yellow) — does NOT interrupt the test.
 
@@ -169,39 +229,61 @@ class AIContext:
             if not result["passed"]:
                 print("Assertion failed but test continues")
         """
-        from skiritai.core.agent_loop import run_agent as _run_agent
+        import json as _json
+        from skiritai.core.agent_loop import _build_llm
 
-        prompt = (
-            f"你是一个断言验证器。请判断以下断言是否为真。\n\n"
-            f"断言: {assertion}\n\n"
-            f"请先分析当前页面的实际状态，然后给出判断。"
-            f"用 JSON 格式回复: {{\"passed\": true/false, \"reason\": \"判断理由\"}}"
-        )
+        # Gather page state
+        title = await self.page.title()
+        url = self.page.url
         try:
-            result = await _run_agent(
-                page=self.page,
-                task_description=prompt,
-                on_log=self.on_log,
-                execution_id=self.execution_id,
-                case_dir=self.case_dir,
-                max_steps=self.max_steps,
+            body_text = await self.page.evaluate("document.body?.innerText?.substring(0, 3000) || ''")
+        except Exception:
+            body_text = ""
+
+        llm = _build_llm(self._llm)
+
+        # Auto-detect language: CJK assertion → Chinese prompt, otherwise English
+        has_cjk = any(
+            '\u4e00' <= c <= '\u9fff' or '\u3400' <= c <= '\u4dbf'
+            for c in assertion
+        )
+        if has_cjk:
+            prompt = (
+                f"你是一个断言验证器。根据当前页面状态判断以下断言是否为真。\n\n"
+                f"页面 URL: {url}\n"
+                f"页面标题: {title}\n"
+                f"页面文本（前3000字符）:\n{body_text}\n\n"
+                f"断言: {assertion}\n\n"
+                f"仅回复 JSON: {{\"passed\": true/false, \"reason\": \"判断理由\"}}"
             )
-            # Try to parse JSON from the result
-            import json as _json
-            summary = result.get("summary", "")
+        else:
+            prompt = (
+                f"You are an assertion verifier. Evaluate whether the following assertion is true "
+                f"based on the current page state.\n\n"
+                f"Page URL: {url}\n"
+                f"Page Title: {title}\n"
+                f"Page Text (first 3000 chars):\n{body_text}\n\n"
+                f"Assertion: {assertion}\n\n"
+                f"Reply with JSON only: {{\"passed\": true/false, \"reason\": \"brief explanation\"}}"
+            )
+        try:
+            from langchain_core.messages import HumanMessage
+            response = await llm.ainvoke([HumanMessage(content=prompt)])
+            content = response.content if hasattr(response, "content") else str(response)
+
             passed = False
-            reason = summary
+            reason = content
             try:
-                # Find JSON in the summary
-                start = summary.find("{")
-                end = summary.rfind("}") + 1
+                start = content.find("{")
+                end = content.rfind("}") + 1
                 if start >= 0 and end > start:
-                    parsed = _json.loads(summary[start:end])
+                    parsed = _json.loads(content[start:end])
                     passed = parsed.get("passed", False)
-                    reason = parsed.get("reason", summary)
+                    reason = parsed.get("reason", content)
             except _json.JSONDecodeError:
-                passed = result.get("success", False)
-                reason = summary
+                # Fallback: check for positive indicators in text
+                passed = any(w in content.lower() for w in ("passed", "true", "correct", "yes"))
+                reason = content
 
             screenshot_path = None
             if not passed and take_screenshot:
@@ -220,7 +302,7 @@ class AIContext:
             if passed:
                 logger.success(f"[Verify] PASS: {assertion[:80]}")
             else:
-                logger.warning(f"[Verify] FAIL: {assertion[:80]} — {reason[:120]}")
+                logger.warning(f"[Verify] FAIL: {assertion[:80]} — {str(reason)[:120]}")
 
             return {"passed": passed, "reason": reason, "screenshot": screenshot_path}
         except Exception as e:
@@ -232,6 +314,32 @@ class AIContext:
                 "screenshot": None,
             })
             return {"passed": False, "reason": str(e), "screenshot": None}
+
+    def copy_for_step(self, step_id: str) -> AIContext:
+        """Create a new AIContext for a different step, carrying over perception cache.
+
+        Use this when you need a fresh context for a new step but want to
+        preserve pre-loaded page analysis data from a previous step.
+
+        Args:
+            step_id: New step identifier.
+
+        Returns:
+            A new AIContext with cached _page_analysis and _page_info preserved.
+        """
+        new_ctx = AIContext(
+            page=self.page,
+            case_dir=self.case_dir,
+            step_id=step_id,
+            on_log=self.on_log,
+            default_mode=self.default_mode,
+            execution_id=self.execution_id,
+            max_steps=self.max_steps,
+            llm=self._llm,
+        )
+        new_ctx._page_analysis = self._page_analysis
+        new_ctx._page_info = self._page_info
+        return new_ctx
 
     # ---- Main action entry ----
 
@@ -286,21 +394,37 @@ class AIContext:
         return result
 
     async def _replay(self) -> dict:
-        """Execute the saved replay script directly without AI reasoning."""
+        """Execute the saved replay script directly without AI reasoning.
+
+        Validates integrity (SHA256 hash) and structure (AST whitelist) before
+        execution. Uses a restricted builtins namespace to sandbox the script.
+        """
         logger.info(f"[Replay] {self.step_id}: executing {self.script_path}")
 
         if not _verify_script(self.script_path):
             return {
                 "success": False,
-                "summary": f"回放脚本完整性校验失败 — 脚本可能已被篡改。请用 explore 模式重新生成。",
+                "summary": "回放脚本完整性校验失败 — 脚本可能已被篡改。请用 explore 模式重新生成。",
                 "steps": [],
             }
 
         try:
             script_content = self.script_path.read_text(encoding="utf-8")
 
+            # AST validation — block imports, exec, eval, etc.
+            tree = ast.parse(script_content, filename=str(self.script_path))
+            _validate_replay_ast(tree)
+
+            # Restricted builtins — safe subset for replay scripts
+            # __builtins__ is a module under normal import, but a dict in __main__.
+            # Use the builtins module for a stable interface.
+            import builtins as _builtins_mod
+            safe_builtins = {
+                k: v for k, v in vars(_builtins_mod).items()
+                if k not in _FORBIDDEN_BUILTINS
+            }
             exec_globals: dict[str, Any] = {
-                "__builtins__": __builtins__,
+                "__builtins__": safe_builtins,
             }
 
             exec(script_content, exec_globals)
@@ -334,6 +458,7 @@ class AIContext:
             execution_id=self.execution_id,
             case_dir=self.case_dir,
             max_steps=self.max_steps,
+            llm=self._llm,
         )
 
         if result.get("success"):

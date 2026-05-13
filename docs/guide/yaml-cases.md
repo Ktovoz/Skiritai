@@ -27,14 +27,14 @@ Place `case.yaml` (or `case.yml`) in a directory and run it with the CLI.
 
 ```bash
 # Via CLI
-skiritai run examples/baidu_yaml
+skiritai run examples/beginner/baidu_search/03_yaml
 
 # Via Python
 from skiritai import run_yaml_case
 from pathlib import Path
 import asyncio
 
-report = asyncio.run(run_yaml_case(Path("examples/baidu_yaml")))
+report = asyncio.run(run_yaml_case(Path("examples/beginner/baidu_search/03_yaml")))
 ```
 
 ## Step Types
