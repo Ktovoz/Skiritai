@@ -90,7 +90,7 @@ def list_cases(cases_root: Path) -> list[dict]:
     from skiritai.core._case_discovery import resolve_case_ids
 
     all_py_dirs = [d.parent for d in sorted(cases_root.rglob("case.py"))]
-    case_id_map = resolve_case_ids(all_py_dirs)  # {case_id: dir_path}
+    case_id_map = resolve_case_ids(all_py_dirs, root=cases_root)
 
     for case_id, d in case_id_map.items():
         seen_dirs.add(str(d))

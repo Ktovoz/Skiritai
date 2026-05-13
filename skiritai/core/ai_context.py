@@ -43,6 +43,11 @@ _FORBIDDEN_BUILTINS = frozenset({
     "breakpoint", "memoryview", "help",
     # Prevent sandbox bypass via getattr(__builtins__, ...) etc.
     "getattr", "setattr", "delattr",
+    # Note: __import__ is intentionally NOT forbidden.
+    # Import statements (ast.Import, ast.ImportFrom) internally rely on
+    # __import__ — removing it would break all replay scripts.  The SHA-256
+    # integrity check (_verify_script) is the real security boundary here;
+    # only framework-generated scripts pass hash verification.
 })
 # Attribute names that must not be accessed (prevents object introspection escapes)
 _FORBIDDEN_ATTRS = frozenset({

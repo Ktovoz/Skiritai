@@ -11,8 +11,6 @@ The public API (``page_perceive``, ``find_element``) is unchanged.
 """
 from __future__ import annotations
 
-from typing import Any
-
 from skiritai.core.tool_registry import register_tool
 from skiritai.logger import logger
 
@@ -72,8 +70,7 @@ _JS_DOM_SERIALIZER = r"""
         while (current && current !== document.body && current !== document.documentElement) {
             const parent = current.parentElement;
             if (!parent) break;
-            const siblings = [...parent.children].filter(c => c.tagName === current.tagName);
-            const idx = siblings.indexOf(current) + 1;
+            const idx = [...parent.children].indexOf(current) + 1;
             let seg = current.tagName.toLowerCase();
             if (current.id) {
                 parts.unshift('#' + CSS.escape(current.id));
@@ -85,7 +82,7 @@ _JS_DOM_SERIALIZER = r"""
                     seg += '.' + CSS.escape(cls);
                 }
             }
-            if (siblings.length > 1) {
+            if (parent.children.length > 1) {
                 seg += ':nth-child(' + idx + ')';
             }
             parts.unshift(seg);
@@ -94,14 +91,19 @@ _JS_DOM_SERIALIZER = r"""
         return parts.join(' > ') || tag;
     };
 
+    const MAX_ELEMENTS = 100;
+    const MAX_DEPTH = 50;
+
     const getText = (el) => {
         if (el.tagName.toLowerCase() === 'input') return el.value || '';
         return (el.textContent || '').trim().substring(0, 200);
     };
 
-    const walk = (root, elements) => {
+    const walk = (root, elements, depth) => {
         if (!root || root.nodeType !== 1) return;
+        if (depth > MAX_DEPTH) return;
         if (!isVisible(root)) return;
+        if (elements.length >= MAX_ELEMENTS) return;
         if (isInteractive(root)) {
             const tag = root.tagName.toLowerCase();
             const text = getText(root);
@@ -122,15 +124,15 @@ _JS_DOM_SERIALIZER = r"""
             });
         }
         // Only recurse if element has children — skip text/comment nodes
-        if (root.children) {
+        if (root.children && elements.length < MAX_ELEMENTS) {
             for (const child of root.children) {
-                walk(child, elements);
+                walk(child, elements, depth + 1);
             }
         }
     };
 
     const elements = [];
-    walk(document.body, elements);
+    walk(document.body, elements, 0);
 
     return JSON.stringify({
         url: location.href,
@@ -296,9 +298,13 @@ async def page_perceive() -> str:
     llm_text = _llm_representation(selector_map)
     output = header + llm_text
 
-    # Truncate if too long for LLM context
+    # Truncate at last complete line to avoid cutting mid-element
     if len(output) > 6000:
-        output = output[:6000] + "\n... (截断，使用 find_element 获取更多细节)"
+        cut = output[:6000]
+        last_nl = cut.rfind("\n")
+        if last_nl > 0:
+            cut = cut[:last_nl]
+        output = cut + "\n... (截断，使用 find_element 获取更多细节)"
 
     return output
 

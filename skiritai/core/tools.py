@@ -231,7 +231,7 @@ async def analyze_page() -> str:
             };
             const mkSelector = (el) => {
                 if (el.id) return '#' + CSS.escape(el.id);
-                if (el.name) return '[name="' + el.name + '"]';
+                if (el.name) return '[name="' + el.name.replace(/"/g, '\\"') + '"]';
                 if (el.className && typeof el.className === 'string') {
                     const cls = el.className.trim().split(/\\s+/)[0];
                     if (cls) return el.tagName.toLowerCase() + '.' + CSS.escape(cls);

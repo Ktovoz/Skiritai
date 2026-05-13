@@ -161,13 +161,22 @@ def _wait_for_cdp(port: int, timeout: float = 10.0) -> bool:
             conn.request("GET", "/json/version")
             resp = conn.getresponse()
             if resp.status == 200:
-                data = json.loads(resp.read().decode("utf-8"))
+                body = resp.read().decode("utf-8")
+                try:
+                    data = json.loads(body)
+                except json.JSONDecodeError:
+                    logger.warning(f"[Browser] CDP on port {port} returned non-JSON: {body[:200]}")
+                    conn.close()
+                    time.sleep(0.3)
+                    continue
                 if data.get("webSocketDebuggerUrl"):
                     conn.close()
                     return True
             conn.close()
+        except (http.client.HTTPException, ConnectionRefusedError, OSError):
+            logger.debug(f"[Browser] CDP not ready on port {port}")
         except Exception as e:
-            logger.debug(f"[Browser] CDP not ready on port {port}: {e}")
+            logger.warning(f"[Browser] Unexpected error probing CDP port {port}: {e}")
         time.sleep(0.3)
     return False
 

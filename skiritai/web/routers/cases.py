@@ -40,7 +40,7 @@ def _build_case_index() -> dict[str, Path]:
     if not CASES_ROOT.exists():
         return {}
     all_dirs = [case_py.parent for case_py in CASES_ROOT.rglob("case.py")]
-    return resolve_case_ids(all_dirs)
+    return resolve_case_ids(all_dirs, root=CASES_ROOT)
 
 
 def set_cases_root(root: Path) -> None:
