@@ -152,6 +152,8 @@ class TestScriptRoundtrip:
 
             ai.scripts_dir.mkdir(parents=True, exist_ok=True)
             ai.script_path.write_text(script, encoding="utf-8")
+            from skiritai.core.ai_context import _save_script_hash
+            _save_script_hash(ai.script_path, script)
 
             assert ai.has_replay() is True
             result = await ai.action("test", mode="replay")
@@ -179,11 +181,13 @@ class TestScriptRoundtrip:
 
             ai = AIContext(page=page, case_dir=case_dir, step_id="broken")
             ai.scripts_dir.mkdir(parents=True, exist_ok=True)
-            ai.script_path.write_text(
+            broken_content = (
                 "async def run(page, context):\n"
-                "    raise ValueError('script is broken')\n",
-                encoding="utf-8",
+                "    raise ValueError('script is broken')\n"
             )
+            ai.script_path.write_text(broken_content, encoding="utf-8")
+            from skiritai.core.ai_context import _save_script_hash
+            _save_script_hash(ai.script_path, broken_content)
 
             result = await ai._replay()
             assert result["success"] is False

@@ -214,10 +214,13 @@ class TestScriptRoundtrip:
 
             ctx = AIContext(page=_make_mock_page(), case_dir=case_dir, step_id="broken")
             ctx.scripts_dir.mkdir(parents=True, exist_ok=True)
-            ctx.script_path.write_text(
+            broken_content = (
                 "async def run(page, context):\n"
                 "    raise ValueError('script is broken')\n"
             )
+            ctx.script_path.write_text(broken_content)
+            from skiritai.core.ai_context import _save_script_hash
+            _save_script_hash(ctx.script_path, broken_content)
 
             result = asyncio.run(ctx._replay())
             assert result["success"] is False

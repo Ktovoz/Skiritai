@@ -29,12 +29,18 @@ _llm_config = None
 
 
 def _build_case_index() -> dict[str, Path]:
-    """Scan CASES_ROOT and build a {case_id: directory_path} index."""
-    index: dict[str, Path] = {}
-    if CASES_ROOT.exists():
-        for case_py in CASES_ROOT.rglob("case.py"):
-            index[case_py.parent.name] = case_py.parent
-    return index
+    """Scan CASES_ROOT and build a {case_id: directory_path} index.
+
+    Uses leaf directory names as IDs. When multiple directories share the same
+    leaf name, disambiguates by prefixing with the parent directory name
+    separated by ``__`` (e.g. ``baidu_search__01_basecase``).
+    """
+    from skiritai.core._case_discovery import resolve_case_ids
+
+    if not CASES_ROOT.exists():
+        return {}
+    all_dirs = [case_py.parent for case_py in CASES_ROOT.rglob("case.py")]
+    return resolve_case_ids(all_dirs, root=CASES_ROOT)
 
 
 def set_cases_root(root: Path) -> None:

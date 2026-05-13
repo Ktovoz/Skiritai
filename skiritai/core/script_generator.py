@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from skiritai.core.agent_loop import PERCEPTION_TOOLS
+from skiritai.logger import logger
 
 # Read-only tools that should never appear in replay scripts
 _READONLY_TOOLS = PERCEPTION_TOOLS | {"get_page_info", "get_text", "response"}
@@ -30,6 +31,11 @@ def generate_replay_script(step_id: str, agent_steps: list[dict]) -> str:
         line = _action_to_line(action, args)
         if line:
             action_lines.append(line)
+        elif action not in _READONLY_TOOLS:
+            logger.warning(
+                f"[ScriptGen] Unrecognized action '{action}' — no replay line generated. "
+                f"Add a handler in _action_to_line or consider adding to READONLY list."
+            )
 
     if not action_lines:
         action_lines.append("    pass")

@@ -99,16 +99,21 @@ class TestBrowserSessionPersistence:
         scripts_dir = case_dir / "scripts"
         scripts_dir.mkdir()
 
-        (scripts_dir / "fill_input.py").write_text(
+        fill_content = (
             "async def run(page, context):\n"
-            '    await page.fill("#text-input", "Replay Persist")\n',
-            encoding="utf-8",
+            '    await page.fill("#text-input", "Replay Persist")\n'
         )
-        (scripts_dir / "click_submit.py").write_text(
+        click_content = (
             "async def run(page, context):\n"
-            '    await page.click("#submit-btn")\n',
-            encoding="utf-8",
+            '    await page.click("#submit-btn")\n'
         )
+        fill_path = scripts_dir / "fill_input.py"
+        fill_path.write_text(fill_content, encoding="utf-8")
+        click_path = scripts_dir / "click_submit.py"
+        click_path.write_text(click_content, encoding="utf-8")
+        from skiritai.core.ai_context import _save_script_hash
+        _save_script_hash(fill_path, fill_content)
+        _save_script_hash(click_path, click_content)
 
         try:
             case1 = BaseCase(case_dir=case_dir)

@@ -51,7 +51,7 @@ from skiritai.core import (
 from skiritai.events import Event, EventBus, event_bus
 from skiritai.llm import create_llm, load_env
 
-__version__ = "0.0.6a"
+__version__ = "0.0.8"
 
 __all__ = [
     # Case framework

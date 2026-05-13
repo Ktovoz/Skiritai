@@ -77,7 +77,8 @@ async def run_case(
 def list_cases(cases_root: Path) -> list[dict]:
     """List all cases (Python + YAML) in the cases directory.
 
-    Recursively scans subdirectories. Case IDs are the leaf directory names.
+    Recursively scans subdirectories. Case IDs use leaf directory names,
+    with ``parent__leaf`` disambiguation when leaf names collide.
     """
     cases = []
     if not cases_root.exists():
@@ -85,10 +86,13 @@ def list_cases(cases_root: Path) -> list[dict]:
 
     seen_dirs = set()
 
-    # Python cases
-    for case_dir in sorted(cases_root.rglob("case.py")):
-        d = case_dir.parent
-        case_id = d.name
+    # Python cases — resolve unique IDs (disambiguates duplicate leaf names)
+    from skiritai.core._case_discovery import resolve_case_ids
+
+    all_py_dirs = [d.parent for d in sorted(cases_root.rglob("case.py"))]
+    case_id_map = resolve_case_ids(all_py_dirs, root=cases_root)
+
+    for case_id, d in case_id_map.items():
         seen_dirs.add(str(d))
         try:
             case_class = discover_case_class(d)

@@ -56,14 +56,14 @@ class TestAPILifecycle:
                 ],
             }
 
-            resp = self.client.post("/api/cases/baidu_search/run")
+            resp = self.client.post("/api/cases/baidu_search__01_basecase/run")
             assert resp.status_code == 200
             assert resp.json()["status"] == "started"
 
             import time
             time.sleep(0.5)
 
-        resp2 = self.client.get("/api/cases/baidu_search/results")
+        resp2 = self.client.get("/api/cases/baidu_search__01_basecase/results")
         assert resp2.status_code == 200
         results = resp2.json()
         assert len(results) >= 1
@@ -75,11 +75,13 @@ class TestAPILifecycle:
     def test_update_and_solidify_script_flow(self):
         cases = self.client.get("/api/cases").json()
         target_case = None
+        target_case_dir = None
         target_step = None
         for c in cases:
             scripts = self.client.get(f"/api/cases/{c['id']}/scripts").json()
             if scripts:
                 target_case = c["id"]
+                target_case_dir = Path(c["case_dir"])
                 target_step = scripts[0]["step_id"]
                 break
 
@@ -101,9 +103,8 @@ class TestAPILifecycle:
         assert resp3.status_code == 200
         assert resp3.json()["status"] == "solidified"
 
-        cases_root = Path(__file__).resolve().parent.parent.parent / "examples"
-        marker = cases_root / target_case / "scripts" / f".{target_step}.solidified"
-        assert marker.exists()
+        marker = target_case_dir / "scripts" / f".{target_step}.solidified" if target_case_dir else None
+        assert marker and marker.exists()
 
         self.client.put(
             f"/api/cases/{target_case}/scripts/{target_step}",
@@ -122,10 +123,10 @@ class TestAPILifecycle:
             return {"status": "completed", "total_steps": 0, "success_count": 0, "failed_count": 0, "steps": []}
 
         with patch("skiritai.web.routers.cases.run_case", side_effect=slow_run):
-            resp1 = self.client.post("/api/cases/baidu_search/run")
+            resp1 = self.client.post("/api/cases/baidu_search__01_basecase/run")
             assert resp1.status_code == 200
 
-            resp2 = self.client.post("/api/cases/baidu_search/run")
+            resp2 = self.client.post("/api/cases/baidu_search__01_basecase/run")
             assert resp2.status_code == 200
 
         import time
@@ -153,7 +154,7 @@ class TestAPILifecycle:
         asyncio.run(_test())
 
     def test_stop_returns_not_found_when_no_task(self):
-        resp = self.client.post("/api/cases/baidu_search/stop")
+        resp = self.client.post("/api/cases/baidu_search__01_basecase/stop")
         assert resp.status_code == 200
         assert resp.json()["status"] == "not_found"
 
@@ -332,7 +333,7 @@ class TestEdgeCases:
         from skiritai.web.app import create_app
 
         client = TestClient(create_app())
-        resp = client.get("/api/cases/baidu_search")
+        resp = client.get("/api/cases/baidu_search__01_basecase")
         assert resp.status_code == 200
 
         steps = resp.json()["steps"]
