@@ -7,7 +7,10 @@
     python /Users/Joeshen/Dpan/code/tools/aimodel/tests/compatibility/mac/serve.py
 
 运行：
-    skiritai run examples/beginner/baidu_search/04_local_model
+    # 方式1: CLI + --config 指定配置文件
+    skiritai run examples/beginner/baidu_search/04_local_model --config examples/beginner/baidu_search/04_local_model/skiritai.toml
+
+    # 方式2: 直接运行 Python（case.py 内部已指定 from_file）
     python examples/beginner/baidu_search/04_local_model/case.py
 """
 import asyncio
