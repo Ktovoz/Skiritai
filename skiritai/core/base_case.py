@@ -282,8 +282,7 @@ class BaseCase:
         logger.info("[Case] Browser launched")
 
     async def close_browser(self):
-        """Close browser and clean up perception layer."""
-        await self._cleanup_perception()
+        """Close browser."""
         if self._browser:
             await self._browser.close()
         if self._pw:
@@ -309,13 +308,10 @@ class BaseCase:
         self._ctx.browser.mode = "persistent"
         self._ctx.browser.cdp_port = cdp_port
         self._ctx.browser.started_at = time.time()
-        # Connect perception layer to the same CDP port
-        await self._init_perception()
         logger.info(f"[Case] Persistent browser launched on CDP port {cdp_port}")
 
     async def disconnect_browser(self):
         """Disconnect from browser WITHOUT killing the browser process."""
-        await self._cleanup_perception()
         if self._browser:
             await self._browser.close()
             self._browser = None
@@ -339,13 +335,10 @@ class BaseCase:
             self._ctx.browser.cdp_port = session.get("cdp_port")
             self._ctx.browser.pid = session.get("pid")
             self._ctx.browser.mode = "persistent"
-        # Re-connect perception layer
-        await self._init_perception()
         logger.info("[Case] Reconnected to existing browser")
 
     async def terminate_browser(self):
         """Fully terminate the persistent browser and clean up."""
-        await self._cleanup_perception()
         if self._pw:
             await self._pw.stop()
             self._pw = None
@@ -357,39 +350,6 @@ class BaseCase:
         self._ctx.browser.mode = ""
         kill_browser(self._case_dir)
         logger.info("[Case] Browser terminated and session cleaned up")
-
-    # ---- Perception layer lifecycle ----
-
-    async def _init_perception(self) -> None:
-        """Connect browser-use BrowserSession to the same CDP port for DOM perception.
-
-        Only connects when CDP port is available (persistent mode or explicit config).
-        Standard mode falls back to Playwright evaluate gracefully.
-        """
-        cdp_port = self._ctx.browser.cdp_port
-        if not cdp_port:
-            logger.debug("[Perception] No CDP port, perception layer unavailable")
-            return
-
-        try:
-            from skiritai.core.perception import create_browser_session, set_browser_session
-            cdp_url = f"http://127.0.0.1:{cdp_port}"
-            session = await create_browser_session(cdp_url)
-            set_browser_session(session)
-            self._ctx.perception_mode = "browser_use"
-            logger.info(f"[Perception] Connected to CDP port {cdp_port}")
-        except Exception as e:
-            logger.warning(f"[Perception] Failed to connect: {e}, falling back to Playwright evaluate")
-            self._ctx.perception_mode = "playwright_fallback"
-
-    async def _cleanup_perception(self) -> None:
-        """Disconnect the browser-use BrowserSession (does NOT close the browser)."""
-        try:
-            from skiritai.core.perception import cleanup
-            await cleanup()
-        except Exception as e:
-            logger.debug(f"[Perception] Cleanup error: {e}")
-        self._ctx.perception_mode = "playwright_fallback"
 
     def has_browser_session(self) -> bool:
         """Check if a persistent browser session file exists."""

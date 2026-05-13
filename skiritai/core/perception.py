@@ -1,88 +1,217 @@
-"""DOM perception layer — reuses browser-use DomService for structured page understanding.
+"""DOM perception layer — Playwright-native JS DOM serialization.
 
-Provides read-only tools that analyze the current page via browser-use's CDP-based
-DOM extraction.  A single BrowserSession is created per case and shared across all
-perception calls, connecting to the same CDP port as Playwright.
+Provides read-only tools that analyze the current page via Playwright's
+``page.evaluate()``, injecting a JavaScript serializer that walks the DOM
+tree and returns structured interactive-element data.
 
-Lifecycle:
-    1. Case starts → BaseCase launches browser (Playwright) with CDP port
-    2. set_browser_session(cdp_url) connects browser-use BrowserSession to same port
-    3. Tools (page_perceive, find_element) call DomService for read-only analysis
-    4. Case ends → cleanup() disconnects browser-use session
+No external dependencies beyond Playwright — previously used browser-use's
+CDP-based DomService, now replaced by pure JS + Playwright.
 
-No dual-session conflicts: both Playwright and browser-use share the same CDP port
-via independent WebSocket connections (Chrome supports multiple CDP clients).
+The public API (``page_perceive``, ``find_element``) is unchanged.
 """
 from __future__ import annotations
 
-import contextvars
 from typing import Any
 
 from skiritai.core.tool_registry import register_tool
 from skiritai.logger import logger
 
-# ContextVar holding the active browser-use BrowserSession (set once per case)
-_session_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_bu_session", default=None)
+# ---------------------------------------------------------------------------
+# JS DOM Serializer — injected via page.evaluate()
+# ---------------------------------------------------------------------------
+
+_JS_DOM_SERIALIZER = r"""
+(() => {
+    const INTERACTIVE_TAGS = new Set([
+        'input', 'textarea', 'select', 'button', 'a'
+    ]);
+    const INTERACTIVE_ROLES = new Set([
+        'button', 'link', 'textbox', 'combobox', 'listbox',
+        'menuitem', 'option', 'tab', 'checkbox', 'radio',
+        'switch', 'slider', 'spinbutton', 'searchbox'
+    ]);
+
+    const isVisible = (el) => {
+        const style = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return style.display !== 'none' &&
+               style.visibility !== 'hidden' &&
+               style.opacity !== '0' &&
+               rect.width > 0 && rect.height > 0;
+    };
+
+    const isInteractive = (el) => {
+        const tag = el.tagName.toLowerCase();
+        if (INTERACTIVE_TAGS.has(tag)) {
+            // Skip hidden inputs and non-interactive types
+            if (tag === 'input') {
+                const type = (el.type || 'text').toLowerCase();
+                if (type === 'hidden') return false;
+            }
+            if (tag === 'a' && !el.href) return false;
+            return true;
+        }
+        if (el.hasAttribute('contenteditable') && el.getAttribute('contenteditable') !== 'false') {
+            return true;
+        }
+        if (el.hasAttribute('tabindex')) return true;
+        const role = (el.getAttribute('role') || '').toLowerCase();
+        if (INTERACTIVE_ROLES.has(role)) return true;
+        // onclick handlers
+        if (typeof el.onclick === 'function') return true;
+        return false;
+    };
+
+    const buildSelector = (el) => {
+        if (el.id) return '#' + CSS.escape(el.id);
+        const tag = el.tagName.toLowerCase();
+        if (el.name) return tag + '[name="' + el.name.replace(/"/g, '\\"') + '"]';
+        // Build a path with :nth-child for uniqueness
+        const parts = [];
+        let current = el;
+        while (current && current !== document.body && current !== document.documentElement) {
+            const parent = current.parentElement;
+            if (!parent) break;
+            const siblings = [...parent.children].filter(c => c.tagName === current.tagName);
+            const idx = siblings.indexOf(current) + 1;
+            let seg = current.tagName.toLowerCase();
+            if (current.id) {
+                parts.unshift('#' + CSS.escape(current.id));
+                break;
+            }
+            if (current.className && typeof current.className === 'string') {
+                const cls = current.className.trim().split(/\s+/)[0];
+                if (cls && !cls.match(/^[0-9]/)) {
+                    seg += '.' + CSS.escape(cls);
+                }
+            }
+            if (siblings.length > 1) {
+                seg += ':nth-child(' + idx + ')';
+            }
+            parts.unshift(seg);
+            current = parent;
+        }
+        return parts.join(' > ') || tag;
+    };
+
+    const getText = (el) => {
+        if (el.tagName.toLowerCase() === 'input') return el.value || '';
+        return (el.textContent || '').trim().substring(0, 200);
+    };
+
+    const walk = (root, elements) => {
+        if (!root || root.nodeType !== 1) return;
+        if (!isVisible(root)) return;
+        if (isInteractive(root)) {
+            const tag = root.tagName.toLowerCase();
+            const text = getText(root);
+            elements.push({
+                tag: tag,
+                text: text,
+                id: root.id || '',
+                name: root.getAttribute('name') || '',
+                type: root.getAttribute('type') || '',
+                value: root.value || '',
+                placeholder: root.getAttribute('placeholder') || '',
+                aria_label: root.getAttribute('aria-label') || '',
+                role: root.getAttribute('role') || '',
+                title: root.getAttribute('title') || '',
+                href: root.href || root.getAttribute('href') || '',
+                class: (typeof root.className === 'string' ? root.className : ''),
+                selector: buildSelector(root)
+            });
+        }
+        // Only recurse if element has children — skip text/comment nodes
+        if (root.children) {
+            for (const child of root.children) {
+                walk(child, elements);
+            }
+        }
+    };
+
+    const elements = [];
+    walk(document.body, elements);
+
+    return JSON.stringify({
+        url: location.href,
+        title: document.title,
+        total_count: elements.length,
+        elements: elements
+    });
+})()
+"""
+
+# ---------------------------------------------------------------------------
+# Python helpers — convert JS output to selector_map + LLM representation
+# ---------------------------------------------------------------------------
 
 
-def set_browser_session(session: Any) -> None:
-    """Set the active browser-use BrowserSession for perception tools."""
-    _session_ctx.set(session)
+def _build_selector_map(raw_json: str) -> dict[int, dict]:
+    """Parse the JS serializer output into a {index: element_dict} map.
 
-
-def get_browser_session() -> Any:
-    """Get the active browser-use BrowserSession."""
-    session = _session_ctx.get()
-    if session is None:
-        raise RuntimeError(
-            "browser-use BrowserSession not initialized. "
-            "Call set_browser_session() first."
-        )
-    return session
-
-
-async def create_browser_session(cdp_url: str) -> Any:
-    """Create and connect a browser-use BrowserSession to an existing CDP endpoint.
-
-    Args:
-        cdp_url: CDP HTTP URL like "http://127.0.0.1:9222"
-
-    Returns:
-        Connected BrowserSession instance
+    The index is 1-based, matching the old browser-use selector_map convention
+    so that ``find_element`` scoring and ``page_perceive`` output remain identical.
     """
-    from browser_use.browser.session import BrowserSession
+    import json
+    data = json.loads(raw_json)
+    elements = data.get("elements", [])
+    smap: dict[int, dict] = {}
+    for i, el in enumerate(elements):
+        smap[i + 1] = {
+            "tag": el.get("tag", ""),
+            "text": el.get("text", ""),
+            "id": el.get("id", ""),
+            "name": el.get("name", ""),
+            "type": el.get("type", ""),
+            "value": el.get("value", ""),
+            "placeholder": el.get("placeholder", ""),
+            "aria_label": el.get("aria_label", ""),
+            "role": el.get("role", ""),
+            "title": el.get("title", ""),
+            "href": el.get("href", ""),
+            "class": el.get("class", ""),
+            "selector": el.get("selector", ""),
+        }
+    return smap
 
-    session = BrowserSession(cdp_url=cdp_url)
-    await session.connect()
-    logger.info(f"[Perception] browser-use BrowserSession connected to {cdp_url}")
-    return session
 
+def _llm_representation(selector_map: dict[int, dict]) -> str:
+    """Format the selector_map as LLM-readable text.
 
-async def cleanup() -> None:
-    """Disconnect the browser-use BrowserSession (does NOT close the browser)."""
-    session = _session_ctx.get()
-    if session is not None:
-        try:
-            await session.stop()
-            logger.info("[Perception] browser-use BrowserSession stopped")
-        except Exception as e:
-            logger.debug(f"[Perception] Error stopping session: {e}")
-        finally:
-            _session_ctx.set(None)
+    Output format (matches old browser-use ``llm_representation()``):
 
+        [1] <button> "Submit" id="submit-btn"
+            #submit-btn
+        [2] <input> type="text" placeholder="搜索"
+            input[name="q"]
 
-async def _get_dom_state() -> Any:
-    """Get the current page's serialized DOM state via browser-use DomService.
-
-    Returns:
-        SerializedDOMState with selector_map and llm_representation()
     """
-    from browser_use.dom.service import DomService
+    lines: list[str] = []
+    for idx in sorted(selector_map.keys()):
+        el = selector_map[idx]
+        tag = el["tag"]
+        parts = [f"[{idx}] <{tag}>"]
 
-    session = get_browser_session()
-    dom_service = DomService(browser_session=session)
-    serialized_state, _enhanced_tree, _timing = await dom_service.get_serialized_dom_tree()
-    return serialized_state
+        # Descriptive attributes
+        label_parts = []
+        text = el["text"]
+        if text:
+            label_parts.append(f'"{text}"')
+        for attr, label in [
+            ("id", "id"), ("name", "name"), ("type", "type"),
+            ("placeholder", "placeholder"), ("role", "role"),
+            ("aria_label", "aria-label"), ("title", "title"),
+        ]:
+            val = el.get(attr, "")
+            if val:
+                label_parts.append(f'{label}="{val}"')
+        if label_parts:
+            parts.append(" " + " ".join(label_parts))
+
+        lines.append("".join(parts))
+        lines.append(f"    {el['selector']}")
+
+    return "\n".join(lines)
 
 
 def _extract_cjk_tokens(text: str) -> list[str]:
@@ -124,28 +253,39 @@ def _extract_cjk_tokens(text: str) -> list[str]:
 # Perception tools (read-only, never modify the page)
 # ---------------------------------------------------------------------------
 
+async def _get_dom_state() -> dict[int, dict]:
+    """Get the current page's interactive elements as a selector_map.
+
+    Injects a JS serializer via Playwright ``page.evaluate()``, then converts
+    the JSON output into a ``{index: element_dict}`` map compatible with the
+    old browser-use API.
+
+    Returns:
+        dict[int, dict] — 1-indexed selector_map
+    """
+    from skiritai.core.tools import get_page
+    page = get_page()
+    raw = await page.evaluate(_JS_DOM_SERIALIZER)
+    return _build_selector_map(raw)
+
+
 @register_tool
 async def page_perceive() -> str:
     """深度分析当前页面的 DOM 结构，返回所有可交互元素的结构化信息。
 
-    这是一个只读感知工具，使用 browser-use 的 DOM 引擎分析页面。
+    这是一个只读感知工具，使用 Playwright JS evaluate 分析页面。
     返回元素的索引号、选择器、文本、角色等信息。
     在执行操作前调用此工具可以帮助你准确定位元素。
 
     Returns:
-        页面结构化 DOM 信息（browser-use DomService 输出）
+        页面结构化 DOM 信息
     """
     try:
-        dom_state = await _get_dom_state()
+        selector_map = await _get_dom_state()
     except Exception as e:
         logger.warning(f"[Perception] page_perceive failed: {e}")
         return f"DOM 分析失败: {e}"
 
-    # Use browser-use's built-in LLM representation
-    llm_text = dom_state.llm_representation()
-
-    # Add summary header
-    selector_map = dom_state.selector_map
     interactive_count = len(selector_map)
 
     header = (
@@ -153,6 +293,7 @@ async def page_perceive() -> str:
         f"---\n"
     )
 
+    llm_text = _llm_representation(selector_map)
     output = header + llm_text
 
     # Truncate if too long for LLM context
@@ -166,23 +307,22 @@ async def page_perceive() -> str:
 async def find_element(description: str) -> str:
     """用自然语言描述查找页面元素，返回最佳匹配的 CSS 选择器。
 
-    这是一个只读感知工具。使用 browser-use 的 DOM 引擎获取页面元素，
+    这是一个只读感知工具。使用 Playwright JS evaluate 获取页面元素，
     然后根据描述匹配最合适的元素。返回选择器供 click/fill 等操作工具使用。
 
     Args:
         description: 对目标元素的描述，如 "搜索按钮"、"用户名输入框"、"提交"
     """
     try:
-        dom_state = await _get_dom_state()
+        selector_map = await _get_dom_state()
     except Exception as e:
         logger.warning(f"[Perception] find_element failed: {e}")
         return f"DOM 分析失败: {e}"
 
-    selector_map = dom_state.selector_map
     desc = description.lower()
 
     if not selector_map:
-        return f"页面上没有找到可交互元素。"
+        return "页面上没有找到可交互元素。"
 
     # Score each interactive element against the description
     candidates = []
@@ -194,32 +334,20 @@ async def find_element(description: str) -> str:
     cjk_tokens = _extract_cjk_tokens(desc)
     all_tokens = keywords + [t for t in cjk_tokens if t not in keywords]
 
-    for idx, node in selector_map.items():
+    for idx, el in selector_map.items():
         score = 0
-        # Collect text fields from the node
-        text_fields = []
 
-        # node is EnhancedDOMTreeNode — access its attributes
-        tag = getattr(node, 'tag_name', '') or ''
-        text = ''
-        try:
-            text = node.get_all_children_text() or ''
-        except Exception:
-            pass
-        aria_label = getattr(node, 'attrs', {}).get('aria-label', '') or ''
-        placeholder = getattr(node, 'attrs', {}).get('placeholder', '') or ''
-        title_attr = getattr(node, 'attrs', {}).get('title', '') or ''
-        name_attr = getattr(node, 'attrs', {}).get('name', '') or ''
-        role = getattr(node, 'attrs', {}).get('role', '') or ''
-        node_id = getattr(node, 'attrs', {}).get('id', '') or ''
-        input_type = getattr(node, 'attrs', {}).get('type', '') or ''
-        value = getattr(node, 'attrs', {}).get('value', '') or ''
-        href = getattr(node, 'attrs', {}).get('href', '') or ''
-        css_selector = ''
-        try:
-            css_selector = node.build_css_selector()
-        except Exception:
-            pass
+        tag = el.get("tag", "")
+        text = el.get("text", "")
+        aria_label = el.get("aria_label", "")
+        placeholder = el.get("placeholder", "")
+        title_attr = el.get("title", "")
+        name_attr = el.get("name", "")
+        role = el.get("role", "")
+        node_id = el.get("id", "")
+        input_type = el.get("type", "")
+        value = el.get("value", "")
+        css_selector = el.get("selector", "")
 
         all_text = ' '.join(filter(None, [
             text, aria_label, placeholder, title_attr, name_attr,

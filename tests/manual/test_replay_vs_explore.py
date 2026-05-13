@@ -23,7 +23,7 @@ async def test_explore_generates_scripts():
 
     from skiritai.core.runner import run_case
 
-    case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "baidu_search"
+    case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "beginner" / "baidu_search" / "01_basecase"
     scripts_dir = case_dir / "scripts"
 
     # Clean existing scripts before test
@@ -73,7 +73,7 @@ async def test_replay_executes_scripts():
     from skiritai.core.runner import run_case
 
     # Use the same case directory for replay (scripts already generated)
-    explore_case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "baidu_search"
+    explore_case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "beginner" / "baidu_search" / "01_basecase"
     replay_case_dir = explore_case_dir  # Same directory — scripts exist from explore
     explore_scripts_dir = explore_case_dir / "scripts"
     replay_scripts_dir = replay_case_dir / "scripts"

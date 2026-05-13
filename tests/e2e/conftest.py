@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from skiritai.core.ai_context import _save_script_hash
+
 # Force headless mode for E2E tests
 os.environ["SKIRITAI_HEADLESS"] = "true"
 
@@ -112,7 +114,9 @@ def simple_case(case_url):
         '    await page.fill("#text-input", "Hello E2E")\n'
         '    await page.click("#submit-btn")\n'
     )
-    (scripts_dir / "fill_and_submit.py").write_text(replay_script, encoding="utf-8")
+    script_path = scripts_dir / "fill_and_submit.py"
+    script_path.write_text(replay_script, encoding="utf-8")
+    _save_script_hash(script_path, replay_script)
 
     yield case_dir, url
     shutil.rmtree(tmpdir, ignore_errors=True)
@@ -151,17 +155,19 @@ def multi_step_case(case_url):
     scripts_dir = case_dir / "scripts"
     scripts_dir.mkdir()
 
-    (scripts_dir / "navigate_page.py").write_text(
+    nav_script = (
         "# Auto-generated replay script\n"
         "# Step: navigate_page\n"
         "\n"
         "async def run(page, context):\n"
         f'    await page.goto("{url}")\n'
-        '    await page.wait_for_load_state("networkidle")\n',
-        encoding="utf-8",
+        '    await page.wait_for_load_state("networkidle")\n'
     )
+    nav_path = scripts_dir / "navigate_page.py"
+    nav_path.write_text(nav_script, encoding="utf-8")
+    _save_script_hash(nav_path, nav_script)
 
-    (scripts_dir / "fill_form.py").write_text(
+    fill_script = (
         "# Auto-generated replay script\n"
         "# Step: fill_form\n"
         "\n"
@@ -169,9 +175,11 @@ def multi_step_case(case_url):
         f'    await page.goto("{url}")\n'
         '    await page.wait_for_load_state("networkidle")\n'
         '    await page.fill("#text-input", "Multi Step")\n'
-        '    await page.click("#submit-btn")\n',
-        encoding="utf-8",
+        '    await page.click("#submit-btn")\n'
     )
+    fill_path = scripts_dir / "fill_form.py"
+    fill_path.write_text(fill_script, encoding="utf-8")
+    _save_script_hash(fill_path, fill_script)
 
     yield case_dir, "e2e_multi_case", url
     shutil.rmtree(tmpdir, ignore_errors=True)

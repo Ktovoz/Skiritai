@@ -29,11 +29,27 @@ _llm_config = None
 
 
 def _build_case_index() -> dict[str, Path]:
-    """Scan CASES_ROOT and build a {case_id: directory_path} index."""
+    """Scan CASES_ROOT and build a {case_id: directory_path} index.
+
+    Uses leaf directory names as IDs. When multiple directories share the same
+    leaf name, disambiguates by prefixing with the parent directory name
+    separated by ``__`` (e.g. ``baidu_search__01_basecase``).
+    """
+    from collections import Counter
+
     index: dict[str, Path] = {}
-    if CASES_ROOT.exists():
-        for case_py in CASES_ROOT.rglob("case.py"):
-            index[case_py.parent.name] = case_py.parent
+    if not CASES_ROOT.exists():
+        return index
+
+    all_dirs = [case_py.parent for case_py in CASES_ROOT.rglob("case.py")]
+    name_counts = Counter(d.name for d in all_dirs)
+
+    for d in all_dirs:
+        if name_counts[d.name] > 1:
+            case_id = f"{d.parent.name}__{d.name}"
+        else:
+            case_id = d.name
+        index[case_id] = d
     return index
 
 

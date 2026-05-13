@@ -77,18 +77,27 @@ async def run_case(
 def list_cases(cases_root: Path) -> list[dict]:
     """List all cases (Python + YAML) in the cases directory.
 
-    Recursively scans subdirectories. Case IDs are the leaf directory names.
+    Recursively scans subdirectories. Case IDs use leaf directory names,
+    with ``parent__leaf`` disambiguation when leaf names collide.
     """
+    from collections import Counter
+
     cases = []
     if not cases_root.exists():
         return cases
 
     seen_dirs = set()
 
-    # Python cases
+    # Python cases — pre-scan for duplicate leaf names
+    all_py_dirs = [d.parent for d in sorted(cases_root.rglob("case.py"))]
+    name_counts = Counter(d.name for d in all_py_dirs)
+
     for case_dir in sorted(cases_root.rglob("case.py")):
         d = case_dir.parent
-        case_id = d.name
+        if name_counts[d.name] > 1:
+            case_id = f"{d.parent.name}__{d.name}"
+        else:
+            case_id = d.name
         seen_dirs.add(str(d))
         try:
             case_class = discover_case_class(d)

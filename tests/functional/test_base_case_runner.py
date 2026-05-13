@@ -89,7 +89,7 @@ class TestPyCaseRunner:
     def test_discover_case_class(self):
         from skiritai.core.runner import discover_case_class
 
-        case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "baidu_search"
+        case_dir = Path(__file__).resolve().parent.parent.parent / "examples" / "beginner" / "baidu_search" / "01_basecase"
         cls = discover_case_class(case_dir)
         assert cls.__name__ == "BaiduSearchCase"
 
@@ -98,11 +98,13 @@ class TestPyCaseRunner:
 
         cases_root = Path(__file__).resolve().parent.parent.parent / "examples"
         cases = list_cases(cases_root)
-        assert len(cases) >= 3  # baidu_search, minimal, ktovoz_blog
+        assert len(cases) >= 6  # 01_basecase, 02_flow, 03_yaml, etc.
 
         case_ids = [c["id"] for c in cases]
-        assert "baidu_search" in case_ids
-        assert "ktovoz_blog" in case_ids
+        assert "baidu_search__01_basecase" in case_ids
+        # check that nested directory names show up as case IDs
+        found_beginner = any("beginner" in c.get("dir", "") for c in cases)
+        assert found_beginner, "cases should include beginner examples"
 
     def test_list_cases_structure(self):
         from skiritai.core.runner import list_cases

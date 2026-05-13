@@ -30,9 +30,16 @@ _ALLOWED_AST_NODES = frozenset({
     ast.BinOp, ast.UnaryOp, ast.IfExp, ast.Dict, ast.List, ast.Tuple,
     ast.Set, ast.Subscript, ast.Slice, ast.Starred, ast.JoinedStr,
     ast.FormattedValue, ast.Await, ast.Global, ast.Nonlocal,
+    # Imports needed for self-contained replay scripts (__main__ path).
+    # Runtime security still enforced via restricted __builtins__ during exec().
+    ast.Import, ast.ImportFrom, ast.alias,
+    # Comparison/Boolean operators (used in if __name__ == "__main__", etc.)
+    ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
+    ast.Is, ast.IsNot, ast.In, ast.NotIn,
+    ast.And, ast.Or, ast.Not,
 })
 _FORBIDDEN_BUILTINS = frozenset({
-    "exec", "eval", "compile", "__import__", "open", "input",
+    "exec", "eval", "compile", "open", "input",
     "breakpoint", "memoryview", "help",
     # Prevent sandbox bypass via getattr(__builtins__, ...) etc.
     "getattr", "setattr", "delattr",
@@ -56,8 +63,6 @@ def _validate_replay_ast(tree: ast.AST) -> None:
                 f"Unsafe AST node in replay script: {type(node).__name__}. "
                 f"Script may only use basic control flow and function calls."
             )
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise ValueError("Import statements are not allowed in replay scripts")
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id in _FORBIDDEN_BUILTINS:
                 raise ValueError(

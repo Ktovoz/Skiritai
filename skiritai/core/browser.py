@@ -1,12 +1,12 @@
 """Browser configuration - use local Chrome installation."""
 import atexit
+import http.client
 import json
 import os
 import signal
 import socket
 import subprocess
 import threading
-import urllib.request
 from pathlib import Path
 
 from skiritai.logger import logger
@@ -149,6 +149,7 @@ def _get_chromium_path(pw) -> str:
 def _wait_for_cdp(port: int, timeout: float = 10.0) -> bool:
     """Wait for Chrome's CDP endpoint to become available.
 
+    Uses http.client directly to avoid urllib proxy interference on macOS.
     Returns True if the endpoint is ready, False on timeout.
     """
     import time
@@ -156,12 +157,15 @@ def _wait_for_cdp(port: int, timeout: float = 10.0) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(
-                    f"http://127.0.0.1:{port}/json/version", timeout=2
-            ) as resp:
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=2)
+            conn.request("GET", "/json/version")
+            resp = conn.getresponse()
+            if resp.status == 200:
                 data = json.loads(resp.read().decode("utf-8"))
                 if data.get("webSocketDebuggerUrl"):
+                    conn.close()
                     return True
+            conn.close()
         except Exception as e:
             logger.debug(f"[Browser] CDP not ready on port {port}: {e}")
         time.sleep(0.3)
