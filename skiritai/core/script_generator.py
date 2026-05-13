@@ -83,6 +83,9 @@ def _action_to_line(action: str, args: dict) -> str | None:
     if action == "click":
         return f'    await page.click("{_esc(args.get("selector", ""))}")'
 
+    if action == "click_text":
+        return f'    await page.get_by_text("{_esc(args.get("text", ""))}").first.click()'
+
     if action == "click_force":
         return f'    await page.click("{_esc(args.get("selector", ""))}", force=True)'
 

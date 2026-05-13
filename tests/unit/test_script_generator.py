@@ -123,6 +123,11 @@ class TestActionToLine:
         line = _action_to_line("click_force", {"selector": "#overlay-btn"})
         assert "force=True" in line
 
+    def test_click_text(self):
+        from skiritai.core.script_generator import _action_to_line
+        line = _action_to_line("click_text", {"text": "百度一下"})
+        assert 'page.get_by_text("百度一下").first.click()' in line
+
     def test_fill_with_text(self):
         from skiritai.core.script_generator import _action_to_line
         line = _action_to_line("fill", {"selector": "#input", "text": "hello"})
@@ -252,6 +257,7 @@ class TestEscaping:
             ("navigate", {"url": "https://example.com"}),
             ("click", {"selector": "#btn"}),
             ("click_force", {"selector": "#forced"}),
+            ("click_text", {"text": "百度一下"}),
             ("fill", {"selector": "#input", "text": "hello"}),
             ("type_text", {"selector": "#slow", "text": "world"}),
             ("focus", {"selector": "#focus"}),
