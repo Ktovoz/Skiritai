@@ -12,7 +12,7 @@ Usage (YAML file)::
 
 Run from CLI::
 
-    skiritai run examples/baidu_yaml
+    skiritai run examples/beginner/baidu_search/03_yaml
 
 Run from Python::
 

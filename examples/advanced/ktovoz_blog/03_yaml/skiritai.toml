@@ -1,10 +1,10 @@
-# Skiritai LLM 配置文件示例
-# 放在用例目录下，框架自动发现并加载
+# Skiritai LLM 配置文件 — 进阶示例
+# 使用 Anthropic Claude 作为 LLM，展示不同配置
 # 支持 ${VAR} 引用环境变量
 
 [llm]
-provider = "openai"
-api_key = "${OPENAI_API_KEY}"
-base_url = "${OPENAI_BASE_URL}"
-model = "gpt-4o"
+provider = "anthropic"
+api_key = "${ANTHROPIC_API_KEY}"
+model = "claude-sonnet-4-20250514"
 temperature = 0.2
+max_tokens = 4096

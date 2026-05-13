@@ -122,7 +122,7 @@ steps:
 ```
 
 ```bash
-skiritai run examples/baidu_yaml
+skiritai run examples/beginner/baidu_search/03_yaml
 ```
 
 YAML cases are perfect for QA teams who want AI-driven testing without writing Python. Supports `action`, `verify`, `screenshot`, `analyze`, `page_info` steps, with per-step `on_failure: skip | abort` policies.
@@ -227,6 +227,10 @@ examples/                      # Sample test cases
 │   ├── hooks_demo/            #   before_step/after_step/on_step_error hooks
 │   └── context_demo/          #   Cross-step context sharing via self.ctx
 ├── baidu_search/              # [First Try] Full E2E AI-driven test + replay scripts
+├── beginner/                  # Beginner examples — 3 usage patterns for Baidu search
+│   └── baidu_search/          #   01_basecase, 02_flow, 03_yaml
+├── advanced/                  # Advanced examples — 3 usage patterns for ktovoz blog
+│   └── ktovoz_blog/           #   01_basecase, 02_flow, 03_yaml
 └── ktovoz_blog/               # [Advanced] 11-step long-range blog test
 
 tests/                         # Framework tests
@@ -240,12 +244,21 @@ tests/                         # Framework tests
 
 Examples are organized into three tiers:
 
-### New Ways to Write Tests (no BaseCase needed)
+### Beginner — Baidu Search (3 usage patterns × 3 LLM configs)
 
 | Example | Description |
 |---|---|
-| `flow_demo/` | Functional Flow API — `async with flow() as ai:` style, no subclass |
-| `baidu_yaml/` | YAML-defined test case — write tests entirely in YAML |
+| `beginner/baidu_search/01_basecase/` | BaseCase class + .env auto-detect |
+| `beginner/baidu_search/02_flow/` | flow() functional API + explicit OpenAIProvider |
+| `beginner/baidu_search/03_yaml/` | YAML declarative + skiritai.toml config file |
+
+### Advanced — ktovoz Blog (3 usage patterns × 3 LLM configs)
+
+| Example | Description |
+|---|---|
+| `advanced/ktovoz_blog/01_basecase/` | BaseCase class + .env (full 11-step blog test) |
+| `advanced/ktovoz_blog/02_flow/` | flow() functional API + explicit Provider |
+| `advanced/ktovoz_blog/03_yaml/` | YAML declarative + skiritai.toml config file |
 
 ### Teaching (learn framework features)
 
@@ -270,20 +283,18 @@ Examples are organized into three tiers:
 | `ktovoz_blog/` | 11-step blog test: homepage, articles, tags, about, footer, search, summary. Demonstrates the framework's capability for complex multi-step scenarios. |
 
 ```bash
-# Flow API — functional style, no subclass
-python examples/flow_demo/demo.py
+# Beginner — Baidu search (3 patterns)
+skiritai run examples/beginner/baidu_search/01_basecase
+python examples/beginner/baidu_search/02_flow/demo.py
+skiritai run examples/beginner/baidu_search/03_yaml
 
-# YAML case — no Python code at all
-skiritai run examples/baidu_yaml
+# Advanced — ktovoz blog (3 patterns)
+skiritai run examples/advanced/ktovoz_blog/01_basecase
+python examples/advanced/ktovoz_blog/02_flow/demo.py
+skiritai run examples/advanced/ktovoz_blog/03_yaml
 
 # Start with a teaching example (no AI needed)
 skiritai run examples/tutorial/minimal
-
-# Try a real-world test (needs LLM configured)
-skiritai run examples/baidu_search
-
-# Advanced long-range test
-skiritai run examples/ktovoz_blog
 ```
 
 ## Roadmap

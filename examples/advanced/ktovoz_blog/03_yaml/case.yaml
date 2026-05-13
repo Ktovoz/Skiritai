@@ -27,6 +27,10 @@ steps:
   - name: 验证搜索结果
     verify: 搜索结果页面返回了与 GCC 相关的文章
 
+  - name: 检查 RSS
+    action: 检查页面上是否有 RSS 订阅链接或邮件订阅入口，如果没有则跳过
+    on_failure: skip
+
   - name: 检查页脚
     action: 返回首页，滚动到页面最底部，检查页脚包含版权信息和社交链接
 

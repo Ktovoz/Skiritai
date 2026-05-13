@@ -121,7 +121,7 @@ steps:
 ```
 
 ```bash
-skiritai run examples/baidu_yaml
+skiritai run examples/beginner/baidu_search/03_yaml
 ```
 
 YAML 用例非常适合不想编写 Python 代码的 QA 团队。支持 `action`、`verify`、`screenshot`、`analyze`、`page_info` 步骤类型，以及每步级别的 `on_failure: skip | abort` 策略。
@@ -209,6 +209,10 @@ examples/                      # 示例测试用例
 │   ├── hooks_demo/            #   before_step/after_step/on_step_error 钩子
 │   └── context_demo/          #   self.ctx 跨步骤上下文共享
 ├── baidu_search/              # [初次尝试] 完整端到端 AI 驱动测试 + 回放脚本
+├── beginner/                  # 入门示例 — 百度搜索 3 种用法
+│   └── baidu_search/          #   01_basecase, 02_flow, 03_yaml
+├── advanced/                  # 进阶示例 — ktovoz 博客 3 种用法
+│   └── ktovoz_blog/           #   01_basecase, 02_flow, 03_yaml
 └── ktovoz_blog/               # [进阶] 11 步长程博客测试
 
 tests/                         # 框架测试
@@ -222,12 +226,21 @@ tests/                         # 框架测试
 
 示例分为三个层级：
 
-### 新式编写方式（无需 BaseCase）
+### 入门 — 百度搜索（3 种用法 × 3 种 LLM 配置）
 
 | 示例 | 说明 |
 |---|---|
-| `flow_demo/` | 函数式 Flow API — `async with flow() as ai:` 风格，无需继承 |
-| `baidu_yaml/` | YAML 定义的测试用例 — 完全用 YAML 编写测试 |
+| `beginner/baidu_search/01_basecase/` | BaseCase 类 + .env 环境变量自动加载 |
+| `beginner/baidu_search/02_flow/` | flow() 函数式 API + 显式 OpenAIProvider |
+| `beginner/baidu_search/03_yaml/` | YAML 声明式 + skiritai.toml 配置文件 |
+
+### 进阶 — ktovoz 博客（3 种用法 × 3 种 LLM 配置）
+
+| 示例 | 说明 |
+|---|---|
+| `advanced/ktovoz_blog/01_basecase/` | BaseCase 类 + .env（完整 11 步博客测试） |
+| `advanced/ktovoz_blog/02_flow/` | flow() 函数式 API + 显式 Provider |
+| `advanced/ktovoz_blog/03_yaml/` | YAML 声明式 + skiritai.toml 配置文件 |
 
 ### 教学（学习框架特性）
 
@@ -252,20 +265,18 @@ tests/                         # 框架测试
 | `ktovoz_blog/` | 11 步博客测试：首页、文章、标签、关于、页脚、搜索、总结。展示框架处理复杂多步骤场景的能力。 |
 
 ```bash
-# Flow API — 函数式风格，无需继承
-python examples/flow_demo/demo.py
+# 入门 — 百度搜索（3 种用法）
+skiritai run examples/beginner/baidu_search/01_basecase
+python examples/beginner/baidu_search/02_flow/demo.py
+skiritai run examples/beginner/baidu_search/03_yaml
 
-# YAML 用例 — 零 Python 代码
-skiritai run examples/baidu_yaml
+# 进阶 — ktovoz 博客（3 种用法）
+skiritai run examples/advanced/ktovoz_blog/01_basecase
+python examples/advanced/ktovoz_blog/02_flow/demo.py
+skiritai run examples/advanced/ktovoz_blog/03_yaml
 
 # 从教学示例开始（无需 AI）
 skiritai run examples/tutorial/minimal
-
-# 尝试真实场景（需要配置 LLM）
-skiritai run examples/baidu_search
-
-# 进阶长程测试
-skiritai run examples/ktovoz_blog
 ```
 
 ## 路线图
