@@ -1,0 +1,10 @@
+# Skiritai LLM 配置文件示例
+# 放在用例目录下，框架自动发现并加载
+# 支持 ${VAR} 引用环境变量
+
+[llm]
+provider = "openai"
+api_key = "${OPENAI_API_KEY}"
+base_url = "${OPENAI_BASE_URL}"
+model = "gpt-4o"
+temperature = 0.2

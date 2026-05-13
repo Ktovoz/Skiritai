@@ -1,0 +1,34 @@
+name: ktovoz.com 博客测试（YAML + 配置文件）
+steps:
+  - name: 打开首页
+    action: 打开 https://ktovoz.com 首页，确认页面正常加载
+
+  - name: 验证首页
+    verify: 页面标题包含博客相关文字，导航栏可见，有文章列表
+
+  - name: 进入文章详情
+    action: 点击第一篇文章，进入文章详情页
+
+  - name: 验证文章内容
+    verify: 页面显示了文章标题、发布日期和正文内容
+
+  - name: 访问 About 页面
+    action: 返回首页，点击导航栏的 About 链接，进入关于页面
+
+  - name: 验证 About 页面
+    verify: 页面包含博主个人信息，如头像或简介
+
+  - name: 探索标签
+    action: 返回首页，点击任意一个标签/分类链接，确认文章列表显示正确
+
+  - name: 搜索功能
+    action: 返回首页，在右上角找到搜索按钮（放大镜图标），点击后输入 GCC 并回车
+
+  - name: 验证搜索结果
+    verify: 搜索结果页面返回了与 GCC 相关的文章
+
+  - name: 检查页脚
+    action: 返回首页，滚动到页面最底部，检查页脚包含版权信息和社交链接
+
+  - name: 截图保存
+    screenshot: final_state
