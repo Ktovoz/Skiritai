@@ -286,6 +286,21 @@ async def analyze_page() -> str:
 
 
 @register_tool
+async def press_key(key: str) -> str:
+    """按下键盘按键。用于提交表单、关闭弹窗等。
+
+    常用按键：'Enter'（提交搜索/表单）、'Escape'（关闭弹窗）、'Tab'（切换焦点）、'Backspace'、'Delete' 等。
+    也可以通过 selector + focus 先聚焦到某个元素，再 press_key('Enter') 来触发该元素的键盘事件。
+
+    Args:
+        key: 按键名称，如 'Enter', 'Escape', 'Tab', 'Backspace', 'ArrowDown', 'a', 'Control+A' 等
+    """
+    page = get_page()
+    await page.keyboard.press(key)
+    return f"已按下按键: {key}"
+
+
+@register_tool
 async def screenshot(name: str = "screenshot") -> str:
     """截取当前页面的截图并保存。
 
