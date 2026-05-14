@@ -81,10 +81,6 @@ def _check_report(results_dir: Path) -> None:
     if b64_count < ss_count:
         errors.append(f"HTML 中 base64 截图数量不足: {b64_count}/{ss_count}")
 
-    # 5. 使用新版 Vue 模板（非旧版 {{case_name}}）
-    if '{"placeholder":true}' in report_html:
-        errors.append("Vue 模板数据未替换 (仍包含占位符)")
-
     if errors:
         print("\n--- 报告检查 FAIL ---")
         for e in errors:

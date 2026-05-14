@@ -184,10 +184,12 @@ def save_report(report: dict, base_dir: Path, label: str = "") -> Path:
 
     # HTML report (human-readable), using the shared template cache
     template = _load_template()
+    prev_data = _load_previous_report(base_dir, ts_dir)
     if template:
         vue_data = _transform_for_vue(report)
-        comp = _build_comparison(base_dir, report, ts_dir)
-        if comp:
+        if prev_data:
+            prev, prev_dir = prev_data
+            comp = _build_comparison(prev, report, prev_dir.name)
             vue_data["comparison"] = comp
         # Embed screenshot data as base64 for self-contained HTML
         for step in vue_data.get("steps", []):
@@ -208,13 +210,15 @@ def save_report(report: dict, base_dir: Path, label: str = "") -> Path:
     logger.info(f"{prefix} Report saved to {ts_dir}")
 
     # Write a comparison summary vs the previous run
-    _write_comparison(base_dir, report, ts_dir)
+    if prev_data:
+        prev, prev_dir = prev_data
+        _write_comparison_text(prev, report, prev_dir.name, ts_dir)
 
     return ts_dir
 
 
-def _build_comparison(base_dir: Path, current: dict, current_dir: Path) -> dict | None:
-    """Build comparison data dict for the Vue report."""
+def _load_previous_report(base_dir: Path, current_dir: Path) -> tuple[dict, Path] | None:
+    """Load the most recent previous run's report, or return None."""
     results_root = base_dir / "test_results"
     if not results_root.exists():
         return None
@@ -235,53 +239,35 @@ def _build_comparison(base_dir: Path, current: dict, current_dir: Path) -> dict 
     except Exception:
         return None
 
+    return prev, prev_dirs[0]
+
+
+def _build_comparison(prev: dict, current: dict, prev_dir_name: str) -> dict:
+    """Build comparison data dict for the Vue report."""
     return {
         "prev_ok": prev.get("success_count", 0),
         "prev_total": prev.get("total_steps", 0),
         "prev_elapsed": prev.get("elapsed_seconds"),
-        "prev_timestamp": prev_dirs[0].name,
+        "prev_timestamp": prev_dir_name,
         "curr_ok": current.get("success_count", 0),
         "curr_total": current.get("total_steps", 0),
         "curr_elapsed": current.get("elapsed_seconds"),
     }
 
 
-def _write_comparison(base_dir: Path, current: dict, current_dir: Path) -> None:
+def _write_comparison_text(prev: dict, current: dict, prev_dir_name: str, current_dir: Path) -> None:
     """Write a brief comparison with the most recent previous run, if any."""
-    results_root = base_dir / "test_results"
-    if not results_root.exists():
-        return
-
-    # Find previous run dirs (sorted by name = timestamp)
-    prev_dirs = sorted(
-        [d for d in results_root.iterdir() if d.is_dir() and d != current_dir],
-        reverse=True,
-    )
-    if not prev_dirs:
-        return
-
-    prev_report_file = prev_dirs[0] / "report.json"
-    if not prev_report_file.exists():
-        return
-
-    try:
-        prev = json.loads(prev_report_file.read_text(encoding="utf-8"))
-    except Exception:
-        return
-
     c_total = current.get("total_steps", 0)
     c_ok = current.get("success_count", 0)
-    c_fail = current.get("failed_count", 0)
     c_elapsed = current.get("elapsed_seconds")
 
     p_total = prev.get("total_steps", 0)
     p_ok = prev.get("success_count", 0)
-    p_fail = prev.get("failed_count", 0)
     p_elapsed = prev.get("elapsed_seconds")
 
     lines = [
         "Comparison with previous run:",
-        f"  Prev: {p_ok}/{p_total} passed{f', {p_elapsed}s' if p_elapsed else ''} — {prev_dirs[0].name}",
+        f"  Prev: {p_ok}/{p_total} passed{f', {p_elapsed}s' if p_elapsed else ''} — {prev_dir_name}",
         f"  Curr: {c_ok}/{c_total} passed{f', {c_elapsed}s' if c_elapsed else ''}",
     ]
     if c_total == p_total and c_ok != p_ok:

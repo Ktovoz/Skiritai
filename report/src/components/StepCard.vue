@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Collapse, CollapsePanel } from 'ant-design-vue'
 import {
   CheckCircleFilled, CloseCircleFilled,
@@ -60,6 +60,10 @@ const elapsedColor = computed(() => {
 })
 
 const activeKeys = ref<string[]>(props.defaultOpen ? [panelKey.value] : [])
+
+watch(() => props.defaultOpen, (open) => {
+  activeKeys.value = open ? [panelKey.value] : []
+})
 
 function formatElapsed(s: number): string {
   if (s < 60) return `${s.toFixed(1)}s`

@@ -123,16 +123,16 @@ class TestActionToLine:
         line = _action_to_line("click", {"selector": "#submit"})
         assert "networkidle" not in line
 
-    def test_click_force(self):
-        from skiritai.core.script_generator import _action_to_line
-        line = _action_to_line("click_force", {"selector": "#overlay-btn"})
-        assert "force=True" in line
-        assert "networkidle" not in line
-
     def test_click_text(self):
         from skiritai.core.script_generator import _action_to_line
         line = _action_to_line("click_text", {"text": "百度一下"})
         assert 'page.get_by_text("百度一下").first.click()' in line
+        assert "networkidle" not in line
+
+    def test_click_force(self):
+        from skiritai.core.script_generator import _action_to_line
+        line = _action_to_line("click_force", {"selector": "#overlay-btn"})
+        assert "force=True" in line
         assert "networkidle" not in line
 
     def test_fill_with_text(self):
