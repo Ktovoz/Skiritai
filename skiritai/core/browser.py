@@ -26,6 +26,8 @@ def _atexit_cleanup() -> None:
             try:
                 os.kill(pid, signal.SIGTERM)
                 logger.info(f"[Browser] atexit: killed orphan browser pid={pid}")
+            except ProcessLookupError:
+                pass  # process already exited
             except OSError:
                 pass
         _launched_pids.clear()
@@ -33,6 +35,19 @@ def _atexit_cleanup() -> None:
 
 # Register cleanup on normal interpreter exit
 atexit.register(_atexit_cleanup)
+
+
+def _signal_handler(signum, frame):
+    """Handle SIGTERM/SIGINT: kill tracked browser processes before exiting."""
+    logger.info(f"[Browser] Received signal {signum}, cleaning up browser processes...")
+    _atexit_cleanup()
+    # Re-raise the signal with default handler to terminate the process
+    signal.signal(signum, signal.SIG_DFL)
+    os.kill(os.getpid(), signum)
+
+
+signal.signal(signal.SIGTERM, _signal_handler)
+signal.signal(signal.SIGINT, _signal_handler)
 
 
 def _register_pid(pid: int) -> None:

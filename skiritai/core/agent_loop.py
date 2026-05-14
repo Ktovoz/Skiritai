@@ -1,6 +1,7 @@
 """Agent loop powered by LangGraph ReAct agent."""
 from __future__ import annotations
 
+import inspect
 import os
 from pathlib import Path
 from typing import Any
@@ -289,7 +290,10 @@ async def run_agent(
                             tool_args = tc.get("args", {})
                             logger.info(f"[Agent] Tool call: {tool_name}({tool_args})")
                             if on_log:
-                                await on_log(f"调用工具: {tool_name}({tool_args})")
+                                if inspect.iscoroutinefunction(on_log):
+                                    await on_log(f"调用工具: {tool_name}({tool_args})")
+                                else:
+                                    on_log(f"调用工具: {tool_name}({tool_args})")
                             await event_bus.publish(Event(
                                 type="tool_called",
                                 execution_id=execution_id,

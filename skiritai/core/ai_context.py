@@ -41,13 +41,13 @@ _ALLOWED_AST_NODES = frozenset({
 _FORBIDDEN_BUILTINS = frozenset({
     "exec", "eval", "compile", "open", "input",
     "breakpoint", "memoryview", "help",
-    # Prevent sandbox bypass via getattr(__builtins__, ...) etc.
     "getattr", "setattr", "delattr",
-    # Note: __import__ is intentionally NOT forbidden.
-    # Import statements (ast.Import, ast.ImportFrom) internally rely on
-    # __import__ — removing it would break all replay scripts.  The SHA-256
-    # integrity check (_verify_script) is the real security boundary here;
-    # only framework-generated scripts pass hash verification.
+})
+# Modules allowed for import in replay scripts.  This is the actual
+# security boundary — __import__ is replaced with a wrapper that only
+# resolves these names (see _safe_import below).
+_SAFE_IMPORT_WHITELIST = frozenset({
+    "asyncio", "playwright", "playwright.async_api",
 })
 # Attribute names that must not be accessed (prevents object introspection escapes)
 _FORBIDDEN_ATTRS = frozenset({
@@ -80,6 +80,13 @@ def _validate_replay_ast(tree: ast.AST) -> None:
                 raise ValueError(
                     f"Forbidden attribute access: '.{node.attr}' in replay script"
                 )
+
+
+def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
+    """Restricted __import__ for replay scripts — only whitelisted modules are allowed."""
+    if name not in _SAFE_IMPORT_WHITELIST:
+        raise ImportError(f"import of '{name}' is not allowed in replay scripts")
+    return __import__(name, globals, locals, fromlist, level)
 
 
 def _compute_script_hash(content: str) -> str:
@@ -437,6 +444,8 @@ class AIContext:
                 k: v for k, v in vars(_builtins_mod).items()
                 if k not in _FORBIDDEN_BUILTINS
             }
+            # Replace __import__ with module-whitelist wrapper
+            safe_builtins["__import__"] = _safe_import
             exec_globals: dict[str, Any] = {
                 "__builtins__": safe_builtins,
             }

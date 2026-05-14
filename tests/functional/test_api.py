@@ -203,6 +203,39 @@ class TestResultPersistence:
                 results_dir.rmdir()
 
 
+class TestPathTraversal:
+    """Path traversal sanitization — step_id/timestamp must not escape case dir."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        from fastapi.testclient import TestClient
+        from skiritai.web.app import create_app
+        from skiritai.core.execution_manager import _executions
+        _executions.clear()
+        self.client = TestClient(create_app())
+
+    def test_step_id_with_dotdot_in_get_script_returns_404(self):
+        resp = self.client.get("/api/cases/minimal/scripts/..%2F..%2F..%2Fetc%2Fpasswd")
+        assert resp.status_code == 404
+
+    def test_step_id_with_dotdot_in_put_script_returns_404(self):
+        resp = self.client.put(
+            "/api/cases/minimal/scripts/..%2F..%2F..%2Fetc%2Fpasswd",
+            json={"content": "malicious"},
+        )
+        assert resp.status_code == 404
+
+    def test_step_id_with_dotdot_in_solidify_returns_404(self):
+        resp = self.client.post(
+            "/api/cases/minimal/scripts/..%2F..%2F..%2Fetc%2Fpasswd/solidify",
+        )
+        assert resp.status_code == 404
+
+    def test_timestamp_with_dotdot_returns_404(self):
+        resp = self.client.get("/api/cases/minimal/results/..%2F..%2F..%2Fetc")
+        assert resp.status_code == 404
+
+
 if __name__ == "__main__":
     import subprocess
 
