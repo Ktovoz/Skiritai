@@ -1,0 +1,4 @@
+# Mark compiled/bundled HTML templates as generated to exclude from GitHub language stats
+skiritai/core/templates/report_vue.html linguist-generated=true
+skiritai/core/templates/report.html linguist-generated=true
+report/index.html linguist-generated=true
