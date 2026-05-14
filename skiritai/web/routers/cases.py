@@ -228,7 +228,8 @@ async def api_list_scripts(case_id: str):
 @router.get("/{case_id}/scripts/{step_id}")
 async def api_get_script(case_id: str, step_id: str):
     """Get script content for a specific step."""
-    script_path = _get_case_dir_or_404(case_id) / "scripts" / f"{step_id}.py"
+    safe_step = Path(step_id).name
+    script_path = _get_case_dir_or_404(case_id) / "scripts" / f"{safe_step}.py"
     if not script_path.exists():
         raise HTTPException(status_code=404, detail="Script not found")
 
@@ -245,7 +246,8 @@ class ScriptUpdate(BaseModel):
 @router.put("/{case_id}/scripts/{step_id}")
 async def api_update_script(case_id: str, step_id: str, body: ScriptUpdate):
     """Update script content and recompute integrity hash."""
-    script_path = _get_case_dir_or_404(case_id) / "scripts" / f"{step_id}.py"
+    safe_step = Path(step_id).name
+    script_path = _get_case_dir_or_404(case_id) / "scripts" / f"{safe_step}.py"
     if not script_path.exists():
         raise HTTPException(status_code=404, detail="Script not found")
 
@@ -262,8 +264,9 @@ async def api_solidify_script(case_id: str, step_id: str):
 
     This confirms the script exists and is ready for replay.
     """
+    safe_step = Path(step_id).name
     scripts_dir = _get_case_dir_or_404(case_id) / "scripts"
-    script_path = scripts_dir / f"{step_id}.py"
+    script_path = scripts_dir / f"{safe_step}.py"
 
     # Create scripts dir if it doesn't exist
     scripts_dir.mkdir(parents=True, exist_ok=True)
@@ -275,7 +278,7 @@ async def api_solidify_script(case_id: str, step_id: str):
         )
 
     # Mark as solidified by creating a marker file
-    marker_path = scripts_dir / f".{step_id}.solidified"
+    marker_path = scripts_dir / f".{safe_step}.solidified"
     marker_path.touch()
 
     return {
@@ -308,7 +311,7 @@ async def api_list_results(case_id: str):
 @router.get("/{case_id}/results/{timestamp}")
 async def api_get_result(case_id: str, timestamp: str):
     """Get a specific execution result."""
-    results_dir = _get_case_dir_or_404(case_id) / "test_results" / timestamp
+    results_dir = _get_case_dir_or_404(case_id) / "test_results" / Path(timestamp).name
     if not results_dir.exists():
         raise HTTPException(status_code=404, detail="Result not found")
 
