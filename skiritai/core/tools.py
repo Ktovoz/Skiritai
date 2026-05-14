@@ -146,6 +146,18 @@ async def wait_for(selector: str, timeout: int = 5000) -> str:
 
 
 @register_tool
+async def wait(seconds: float = 1.0) -> str:
+    """等待指定的秒数。用于页面加载、动画完成、AJAX 请求等场景。
+
+    Args:
+        seconds: 等待的秒数，默认 1.0
+    """
+    import asyncio
+    await asyncio.sleep(seconds)
+    return f"已等待 {seconds} 秒"
+
+
+@register_tool
 async def scroll(direction: str, amount: int = 500) -> str:
     """滚动页面。
 

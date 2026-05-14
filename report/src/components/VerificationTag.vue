@@ -1,44 +1,58 @@
 <script setup lang="ts">
-import { Tag } from 'ant-design-vue'
-import { CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons-vue'
+import { CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons-vue'
 import type { Verification } from '../types'
 
 defineProps<{ verification: Verification }>()
 </script>
 
 <template>
-  <div class="verification-row">
-    <Tag :color="verification.passed ? 'success' : 'error'" class="verif-tag">
-      <CheckCircleOutlined v-if="verification.passed" />
-      <CloseCircleOutlined v-else />
-      <span class="verif-text">{{ verification.assertion }}</span>
-    </Tag>
-    <span v-if="verification.reason" class="verif-reason">{{ verification.reason }}</span>
+  <div class="verif-item" :class="{ passed: verification.passed, failed: !verification.passed }">
+    <div class="verif-header">
+      <span class="verif-icon">
+        <CheckCircleFilled v-if="verification.passed" />
+        <CloseCircleFilled v-else />
+      </span>
+      <span class="verif-assertion">{{ verification.assertion }}</span>
+    </div>
+    <div v-if="verification.reason" class="verif-reason">{{ verification.reason }}</div>
   </div>
 </template>
 
 <style scoped>
-.verification-row {
+.verif-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  border: 1px solid #f0f0f0;
+  background: #fafafa;
+}
+.verif-item.passed { border-left: 3px solid #b7eb8f; }
+.verif-item.failed { border-left: 3px solid #ffa39e; }
+
+.verif-header {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin-bottom: 4px;
 }
-.verif-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.verif-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  margin-top: 1px;
+}
+.verif-item.passed .verif-icon { color: #52c41a; }
+.verif-item.failed .verif-icon { color: #ff4d4f; }
+
+.verif-assertion {
   font-size: 13px;
-  white-space: normal;
+  font-weight: 500;
+  color: #262626;
   line-height: 1.5;
-}
-.verif-text {
-  margin-left: 4px;
 }
 .verif-reason {
+  margin-top: 6px;
   font-size: 12px;
-  color: #999;
-  line-height: 1.5;
-  margin-top: 2px;
+  color: #8c8c8c;
+  line-height: 1.6;
+  padding-left: 22px;
 }
 </style>

@@ -133,8 +133,9 @@ class FlowAI:
 
         entry = {
             "step_id": step_id,
+            "title": description if len(description) <= 50 else description[:47] + "...",
             "status": "success" if result.get("success") else "failed",
-            "mode": "replay" if ai.has_replay() else "explore",
+            "mode": result.get("mode", "explore"),
             "summary": result.get("summary", ""),
             "elapsed": round(ai._step_elapsed, 2),
             "type": "action",
@@ -164,7 +165,7 @@ class FlowAI:
         Returns:
             dict with keys: passed, reason, screenshot.
         """
-        step_id = self._next_step_id("verify_")
+        step_id = self._next_step_id()
         ai = self._advance_ai(step_id)
         self._ctx.current_step = step_id
         ai._step_started_at = time.time()
@@ -179,10 +180,13 @@ class FlowAI:
             screenshots.append(ss_info)
             self._screenshots.append(ss_info)
 
+        display_name = assertion if len(assertion) <= 40 else assertion[:37] + "..."
         entry = {
-            "step_id": step_id,
+            "step_id": display_name,
+            "title": assertion,
             "status": "passed" if result.get("passed") else "failed",
             "type": "verify",
+            "mode": "verify",
             "assertion": assertion,
             "reason": result.get("reason", ""),
             "elapsed": round(ai._step_elapsed, 2),
@@ -201,11 +205,26 @@ class FlowAI:
         Returns:
             File path of the saved screenshot.
         """
-        step_id = self._next_step_id("ss_")
+        step_id = self._next_step_id()
         ai = self._ensure_ai(step_id)
         ai._step_started_at = time.time()
         path = await ai.screenshot(name)
-        self._screenshots.append({"name": name, "path": path, "step_id": step_id, "timestamp": ai._step_started_at})
+        elapsed = time.time() - ai._step_started_at
+
+        ss_info = {"name": name, "path": path, "step_id": step_id, "timestamp": ai._step_started_at}
+        self._screenshots.append(ss_info)
+
+        entry = {
+            "step_id": name,
+            "title": f"Screenshot: {name}",
+            "status": "success",
+            "type": "screenshot",
+            "mode": "screenshot",
+            "summary": f"Screenshot: {name}",
+            "elapsed": round(elapsed, 2),
+            "screenshots": [ss_info],
+        }
+        self._results.append(entry)
         return path
 
     async def analyze_page(self) -> dict:
@@ -235,25 +254,6 @@ class FlowAI:
             return
 
         from skiritai.core.report_builder import normalize_report
-
-        # Standalone screenshot() calls get their own step entries.
-        # Screenshots captured during action/verify are already embedded
-        # in the step entry — skip duplicate matching.
-        seen_ss = set()
-        for entry in self._results:
-            for s in entry.get("screenshots", []):
-                seen_ss.add(s.get("path", ""))
-
-        for ss in self._screenshots:
-            if ss.get("path") in seen_ss:
-                continue
-            self._results.append({
-                "step_id": ss.get("step_id", "screenshot"),
-                "status": "success",
-                "type": "screenshot",
-                "screenshots": [ss],
-                "elapsed": 0,
-            })
 
         raw = {
             "case_name": "flow",

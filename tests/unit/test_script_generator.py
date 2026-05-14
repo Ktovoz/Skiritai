@@ -116,12 +116,24 @@ class TestActionToLine:
     def test_click_with_selector(self):
         from skiritai.core.script_generator import _action_to_line
         line = _action_to_line("click", {"selector": "#submit"})
-        assert line == '    await page.click("#submit")'
+        assert 'await page.click("#submit")' in line
+
+    def test_click_no_networkidle(self):
+        from skiritai.core.script_generator import _action_to_line
+        line = _action_to_line("click", {"selector": "#submit"})
+        assert "networkidle" not in line
+
+    def test_click_text(self):
+        from skiritai.core.script_generator import _action_to_line
+        line = _action_to_line("click_text", {"text": "百度一下"})
+        assert 'page.get_by_text("百度一下").first.click()' in line
+        assert "networkidle" not in line
 
     def test_click_force(self):
         from skiritai.core.script_generator import _action_to_line
         line = _action_to_line("click_force", {"selector": "#overlay-btn"})
         assert "force=True" in line
+        assert "networkidle" not in line
 
     def test_fill_with_text(self):
         from skiritai.core.script_generator import _action_to_line
@@ -194,6 +206,21 @@ class TestActionToLine:
         line = _action_to_line("non_existent_action", {})
         assert line is None
 
+    def test_wait_with_default_seconds(self):
+        from skiritai.core.script_generator import _action_to_line
+        line = _action_to_line("wait", {})
+        assert "await asyncio.sleep(1.0)" in line
+
+    def test_wait_with_custom_seconds(self):
+        from skiritai.core.script_generator import _action_to_line
+        line = _action_to_line("wait", {"seconds": 2.5})
+        assert "await asyncio.sleep(2.5)" in line
+
+    def test_press_key(self):
+        from skiritai.core.script_generator import _action_to_line
+        line = _action_to_line("press_key", {"key": "Enter"})
+        assert "await page.keyboard.press('Enter')" in line
+
     def test_missing_args_defaults_to_empty(self):
         from skiritai.core.script_generator import _action_to_line
         # fill without text should use empty string
@@ -251,6 +278,7 @@ class TestEscaping:
         for action, args in [
             ("navigate", {"url": "https://example.com"}),
             ("click", {"selector": "#btn"}),
+            ("click_text", {"text": "百度一下"}),
             ("click_force", {"selector": "#forced"}),
             ("fill", {"selector": "#input", "text": "hello"}),
             ("type_text", {"selector": "#slow", "text": "world"}),
@@ -261,6 +289,8 @@ class TestEscaping:
             ("eval_js", {"expression": "document.title"}),
             ("select_option", {"selector": "#sel", "value": "opt"}),
             ("hover", {"selector": "#hover"}),
+            ("wait", {"seconds": 0.5}),
+            ("press_key", {"key": "Enter"}),
         ]:
             all_actions.append({"action": action, "args": args})
 

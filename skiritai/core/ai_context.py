@@ -381,6 +381,7 @@ class AIContext:
             description = prelude + "任务：" + description
 
         mode = mode or self.default_mode
+        actual_mode = mode if mode != "auto" else "explore"
         if mode == "explore":
             result = await self._explore(description)
         elif mode == "replay":
@@ -393,13 +394,16 @@ class AIContext:
         else:  # auto
             if self.has_replay():
                 result = await self._replay()
+                actual_mode = "replay"
                 if not result.get("success"):
                     logger.warning(
                         f"[Auto] {self.step_id}: replay failed, falling back to explore"
                     )
                     result = await self._explore(description)
+                    actual_mode = "explore"
             else:
                 result = await self._explore(description)
+        result["mode"] = actual_mode
         self._last_result = result
         return result
 
