@@ -38,7 +38,6 @@ const failures = computed(() => report.steps.filter(s => s.status === 'failed'))
 </template>
 
 <style>
-/* Global reset */
 * {
   box-sizing: border-box;
   margin: 0;

@@ -1,11 +1,26 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons-vue'
+import { CheckCircleFilled, CloseCircleFilled, WarningOutlined } from '@ant-design/icons-vue'
 import type { ReportData } from '../types'
 
 const props = defineProps<{ report: ReportData }>()
 
 const isPassed = computed(() => props.report.status === 'completed')
+const failedCount = computed(() => props.report.failed_count)
+
+function scrollToFirstFailure() {
+  const failedStep = document.querySelector('[id^="step-"] .timeline-node.failed')
+  if (failedStep) {
+    failedStep.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
+
+function formatElapsed(s: number): string {
+  if (s < 60) return `${s.toFixed(1)}s`
+  const m = Math.floor(s / 60)
+  const sec = Math.round(s % 60)
+  return `${m}m${sec}s`
+}
 </script>
 
 <template>
@@ -18,22 +33,19 @@ const isPassed = computed(() => props.report.status === 'completed')
         <span class="meta-item">{{ formatElapsed(report.elapsed_seconds) }}</span>
       </div>
     </div>
-    <div class="header-status">
-      <CheckCircleFilled v-if="isPassed" class="status-icon" />
-      <CloseCircleFilled v-else class="status-icon" />
-      <span class="status-text">{{ isPassed ? 'PASSED' : 'FAILED' }}</span>
+    <div class="header-right">
+      <button v-if="failedCount > 0" class="jump-failures-btn" @click="scrollToFirstFailure">
+        <WarningOutlined />
+        {{ failedCount }} Failure{{ failedCount > 1 ? 's' : '' }}
+      </button>
+      <div class="header-status">
+        <CheckCircleFilled v-if="isPassed" class="status-icon" />
+        <CloseCircleFilled v-else class="status-icon" />
+        <span class="status-text">{{ isPassed ? 'PASSED' : 'FAILED' }}</span>
+      </div>
     </div>
   </div>
 </template>
-
-<script lang="ts">
-function formatElapsed(s: number): string {
-  if (s < 60) return `${s.toFixed(1)}s`
-  const m = Math.floor(s / 60)
-  const sec = Math.round(s % 60)
-  return `${m}m${sec}s`
-}
-</script>
 
 <style scoped>
 .report-header {
@@ -66,6 +78,28 @@ function formatElapsed(s: number): string {
   height: 4px;
   border-radius: 50%;
   background: #d9d9d9;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.jump-failures-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #ffccc7;
+  background: #fff1f0;
+  color: #cf1322;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.jump-failures-btn:hover {
+  background: #ffccc7;
 }
 .header-status {
   display: flex;

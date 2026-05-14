@@ -123,6 +123,13 @@ def _action_to_line(action: str, args: dict) -> str | None:
     if action == "screenshot":
         return f'    await page.screenshot(path="{_esc(args.get("name", "screenshot"))}.png", full_page=True)'
 
+    if action == "wait":
+        seconds = args.get("seconds", 1.0)
+        return f"    await asyncio.sleep({seconds})"
+
+    if action == "press_key":
+        return f"    await page.keyboard.press({args.get('key', 'Enter')!r})"
+
     return None
 
 

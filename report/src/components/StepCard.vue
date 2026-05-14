@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Collapse, CollapsePanel } from 'ant-design-vue'
 import {
   CheckCircleFilled, CloseCircleFilled,
@@ -12,6 +12,7 @@ import ScreenshotViewer from './ScreenshotViewer.vue'
 const props = defineProps<{
   step: StepEntry
   index: number
+  defaultOpen?: boolean
 }>()
 
 const panelKey = computed(() => `step-${props.index}`)
@@ -34,7 +35,31 @@ const typeLabel = computed(() => {
   }
 })
 
+const displayTitle = computed(() => {
+  return props.step.title || props.step.step_id
+})
+
 const statusColor = computed(() => props.step.status === 'success' ? '#52c41a' : '#ff4d4f')
+
+const elapsedHeat = computed(() => {
+  const s = props.step.elapsed
+  if (s < 5) return 'fast'
+  if (s < 15) return 'normal'
+  if (s < 30) return 'slow'
+  return 'critical'
+})
+
+const elapsedColor = computed(() => {
+  switch (elapsedHeat.value) {
+    case 'fast': return '#8c8c8c'
+    case 'normal': return '#d48806'
+    case 'slow': return '#d46b08'
+    case 'critical': return '#cf1322'
+    default: return '#8c8c8c'
+  }
+})
+
+const activeKeys = ref<string[]>(props.defaultOpen ? [panelKey.value] : [])
 
 function formatElapsed(s: number): string {
   if (s < 60) return `${s.toFixed(1)}s`
@@ -45,48 +70,92 @@ function formatElapsed(s: number): string {
 </script>
 
 <template>
-  <div class="step-card">
-    <Collapse :bordered="false" class="step-collapse">
-      <CollapsePanel :key="panelKey">
-        <template #header>
-          <div class="header-row">
-            <span class="step-index">{{ index }}</span>
-            <span class="type-badge" :class="stepType">
-              <component :is="typeIcon" class="type-badge-icon" />
-              {{ typeLabel }}
-            </span>
-            <span class="step-title">{{ step.step_id }}</span>
-            <span class="step-spacer" />
-            <span v-if="step.mode && step.mode !== stepType" class="mode-label">{{ step.mode }}</span>
-            <span class="elapsed">{{ formatElapsed(step.elapsed) }}</span>
-            <span class="status-dot" :style="{ background: statusColor }">
-              <CheckCircleFilled v-if="step.status === 'success'" />
-              <CloseCircleFilled v-else />
-            </span>
-          </div>
-        </template>
-        <div class="body">
-          <div v-if="step.summary" class="summary">{{ step.summary }}</div>
-          <div v-if="step.error" class="error-block">{{ step.error }}</div>
+  <div class="step-timeline-row">
+    <div class="timeline-rail">
+      <div class="timeline-node" :class="step.status" />
+      <div v-if="index > 0" class="timeline-line" />
+    </div>
+    <div class="step-card">
+      <Collapse v-model:activeKey="activeKeys" :bordered="false" class="step-collapse">
+        <CollapsePanel :key="panelKey" :show-arrow="false">
+          <template #header>
+            <div class="header-row">
+              <span class="step-index">{{ index }}</span>
+              <span class="type-badge" :class="stepType">
+                <component :is="typeIcon" class="type-badge-icon" />
+                {{ typeLabel }}
+              </span>
+              <span class="step-title">{{ displayTitle }}</span>
+              <span class="step-spacer" />
+              <span v-if="step.mode && step.mode !== stepType" class="mode-label">{{ step.mode }}</span>
+              <span class="elapsed" :style="{ color: elapsedColor }">{{ formatElapsed(step.elapsed) }}</span>
+              <span class="status-dot" :style="{ background: statusColor }">
+                <CheckCircleFilled v-if="step.status === 'success'" />
+                <CloseCircleFilled v-else />
+              </span>
+              <span class="expand-arrow" :class="{ open: activeKeys.includes(panelKey) }">&#9656;</span>
+            </div>
+          </template>
+          <div class="body">
+            <div v-if="step.summary" class="summary">{{ step.summary }}</div>
+            <div v-if="step.error" class="error-block">{{ step.error }}</div>
 
-          <div v-if="step.verifications && step.verifications.length > 0" class="verifications">
-            <VerificationTag
-              v-for="(v, i) in step.verifications"
-              :key="i"
-              :verification="v"
-            />
-          </div>
+            <div v-if="step.verifications && step.verifications.length > 0" class="verifications">
+              <VerificationTag
+                v-for="(v, i) in step.verifications"
+                :key="i"
+                :verification="v"
+              />
+            </div>
 
-          <ScreenshotViewer :screenshots="step.screenshots" />
-        </div>
-      </CollapsePanel>
-    </Collapse>
+            <ScreenshotViewer :screenshots="step.screenshots" />
+          </div>
+        </CollapsePanel>
+      </Collapse>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.step-timeline-row {
+  display: flex;
+  gap: 16px;
+  min-height: 0;
+}
+
+/* -- Timeline rail (left side) -- */
+.timeline-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 14px;
+  flex-shrink: 0;
+  position: relative;
+}
+.timeline-node {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 16px;
+  border: 2px solid #d9d9d9;
+  background: #fff;
+  z-index: 1;
+}
+.timeline-node.success { border-color: #b7eb8f; background: #f6ffed; }
+.timeline-node.failed { border-color: #ffa39e; background: #fff1f0; }
+
+.timeline-line {
+  width: 2px;
+  flex: 1;
+  background: #f0f0f0;
+  margin-top: 2px;
+}
+
+/* -- Step card -- */
 .step-card {
-  margin-bottom: 6px;
+  flex: 1;
+  min-width: 0;
 }
 .step-collapse {
   background: #fff;
@@ -110,12 +179,12 @@ function formatElapsed(s: number): string {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #f0f2f5;
   color: #8c8c8c;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -133,9 +202,7 @@ function formatElapsed(s: number): string {
   background: #f5f7fa;
   color: #8c8c8c;
 }
-.type-badge-icon {
-  font-size: 12px;
-}
+.type-badge-icon { font-size: 12px; }
 .type-badge.action { color: #595959; background: #f5f7fa; }
 .type-badge.verify { color: #389e0d; background: #f6ffed; }
 .type-badge.screenshot { color: #7c6913; background: #fffdf0; }
@@ -157,9 +224,11 @@ function formatElapsed(s: number): string {
 }
 
 .elapsed {
-  color: #bfbfbf;
-  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  min-width: 42px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.2s;
 }
 
 .status-dot {
@@ -174,10 +243,18 @@ function formatElapsed(s: number): string {
   flex-shrink: 0;
 }
 
-/* -- Body -- */
-.body {
-  padding: 4px 0;
+.expand-arrow {
+  font-size: 12px;
+  color: #bfbfbf;
+  flex-shrink: 0;
+  transition: transform 0.2s;
 }
+.expand-arrow.open {
+  transform: rotate(90deg);
+}
+
+/* -- Body -- */
+.body { padding: 4px 0; }
 .summary {
   font-size: 13px;
   color: #595959;
@@ -200,7 +277,5 @@ function formatElapsed(s: number): string {
   margin-bottom: 12px;
   line-height: 1.6;
 }
-.verifications {
-  margin-bottom: 8px;
-}
+.verifications { margin-bottom: 8px; }
 </style>

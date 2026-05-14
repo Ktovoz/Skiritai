@@ -12,6 +12,7 @@ export interface Verification {
 
 export interface StepEntry {
   step_id: string
+  title?: string  // human-readable description
   type?: 'action' | 'verify' | 'screenshot'
   status: 'success' | 'failed'
   mode: 'explore' | 'replay' | 'verify' | 'screenshot' | null
@@ -20,6 +21,16 @@ export interface StepEntry {
   screenshots: Screenshot[]
   verifications: Verification[]
   error?: string
+}
+
+export interface ComparisonData {
+  prev_ok: number
+  prev_total: number
+  prev_elapsed: number | null
+  prev_timestamp: string
+  curr_ok: number
+  curr_total: number
+  curr_elapsed: number | null
 }
 
 export interface ReportData {
@@ -31,5 +42,6 @@ export interface ReportData {
   steps: StepEntry[]
   phase: string
   elapsed_seconds: number
+  comparison?: ComparisonData
   error?: string
 }

@@ -186,6 +186,9 @@ def save_report(report: dict, base_dir: Path, label: str = "") -> Path:
     template = _load_template()
     if template:
         vue_data = _transform_for_vue(report)
+        comp = _build_comparison(base_dir, report, ts_dir)
+        if comp:
+            vue_data["comparison"] = comp
         # Embed screenshot data as base64 for self-contained HTML
         for step in vue_data.get("steps", []):
             for s in step.get("screenshots", []):
@@ -208,6 +211,39 @@ def save_report(report: dict, base_dir: Path, label: str = "") -> Path:
     _write_comparison(base_dir, report, ts_dir)
 
     return ts_dir
+
+
+def _build_comparison(base_dir: Path, current: dict, current_dir: Path) -> dict | None:
+    """Build comparison data dict for the Vue report."""
+    results_root = base_dir / "test_results"
+    if not results_root.exists():
+        return None
+
+    prev_dirs = sorted(
+        [d for d in results_root.iterdir() if d.is_dir() and d != current_dir],
+        reverse=True,
+    )
+    if not prev_dirs:
+        return None
+
+    prev_report_file = prev_dirs[0] / "report.json"
+    if not prev_report_file.exists():
+        return None
+
+    try:
+        prev = json.loads(prev_report_file.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+    return {
+        "prev_ok": prev.get("success_count", 0),
+        "prev_total": prev.get("total_steps", 0),
+        "prev_elapsed": prev.get("elapsed_seconds"),
+        "prev_timestamp": prev_dirs[0].name,
+        "curr_ok": current.get("success_count", 0),
+        "curr_total": current.get("total_steps", 0),
+        "curr_elapsed": current.get("elapsed_seconds"),
+    }
 
 
 def _write_comparison(base_dir: Path, current: dict, current_dir: Path) -> None:

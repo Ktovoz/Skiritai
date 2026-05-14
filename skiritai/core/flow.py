@@ -133,6 +133,7 @@ class FlowAI:
 
         entry = {
             "step_id": step_id,
+            "title": description if len(description) <= 50 else description[:47] + "...",
             "status": "success" if result.get("success") else "failed",
             "mode": result.get("mode", "explore"),
             "summary": result.get("summary", ""),
@@ -182,6 +183,7 @@ class FlowAI:
         display_name = assertion if len(assertion) <= 40 else assertion[:37] + "..."
         entry = {
             "step_id": display_name,
+            "title": assertion,
             "status": "passed" if result.get("passed") else "failed",
             "type": "verify",
             "mode": "verify",
@@ -214,6 +216,7 @@ class FlowAI:
 
         entry = {
             "step_id": name,
+            "title": f"Screenshot: {name}",
             "status": "success",
             "type": "screenshot",
             "mode": "screenshot",
