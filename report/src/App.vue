@@ -38,7 +38,6 @@ const failures = computed(() => report.steps.filter(s => s.status === 'failed'))
 </template>
 
 <style>
-/* Global reset */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -46,9 +45,9 @@ const failures = computed(() => report.steps.filter(s => s.status === 'failed'))
 }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-  background: #f0f2f5;
+  background: #f7f8fa;
   color: #333;
-  padding: 24px;
+  padding: 32px 24px;
 }
 .app-container {
   max-width: 960px;
@@ -61,25 +60,29 @@ body {
   background: #fff;
   border-radius: 8px;
   padding: 24px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid #ebeef5;
+  margin-top: 8px;
 }
 .failures-title {
-  color: #c41e1e;
-  font-size: 16px;
+  color: #cf1322;
+  font-size: 15px;
+  font-weight: 600;
   margin-bottom: 12px;
 }
 .failure-item {
-  padding: 8px 0;
-  border-bottom: 1px solid #f0f0f0;
-  font-size: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f5f5f5;
+  font-size: 13px;
+  color: #595959;
 }
 .failure-item:last-child {
   border-bottom: none;
 }
 .footer {
   text-align: center;
-  color: #ccc;
+  color: #d9d9d9;
   font-size: 12px;
-  margin-top: 24px;
+  margin-top: 32px;
+  letter-spacing: 0.3px;
 }
 </style>

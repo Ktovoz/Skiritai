@@ -1,26 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Tag } from 'ant-design-vue'
+import { CheckCircleFilled, CloseCircleFilled, WarningOutlined } from '@ant-design/icons-vue'
 import type { ReportData } from '../types'
 
 const props = defineProps<{ report: ReportData }>()
 
-const statusColor = computed(() => props.report.status === 'completed' ? 'success' : 'error')
-const statusText = computed(() => props.report.status === 'completed' ? 'PASSED' : 'FAILED')
-</script>
+const isPassed = computed(() => props.report.status === 'completed')
+const failedCount = computed(() => props.report.failed_count)
 
-<template>
-  <div class="report-header">
-    <h1 class="case-title">{{ report.case_name }}</h1>
-    <div class="header-meta">
-      <Tag :color="statusColor" class="status-tag">{{ statusText }}</Tag>
-      <span class="meta-text">{{ report.success_count }}/{{ report.total_steps }} steps passed</span>
-      <span class="meta-text">{{ formatElapsed(report.elapsed_seconds) }}</span>
-    </div>
-  </div>
-</template>
+function scrollToFirstFailure() {
+  const failedStep = document.querySelector('[id^="step-"] .timeline-node.failed')
+  if (failedStep) {
+    failedStep.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
 
-<script lang="ts">
 function formatElapsed(s: number): string {
   if (s < 60) return `${s.toFixed(1)}s`
   const m = Math.floor(s / 60)
@@ -29,32 +23,103 @@ function formatElapsed(s: number): string {
 }
 </script>
 
+<template>
+  <div class="report-header" :class="{ passed: isPassed, failed: !isPassed }">
+    <div class="header-left">
+      <h1 class="case-title">{{ report.case_name }}</h1>
+      <div class="header-meta">
+        <span class="meta-item">{{ report.success_count }}/{{ report.total_steps }} steps</span>
+        <span class="meta-divider" />
+        <span class="meta-item">{{ formatElapsed(report.elapsed_seconds) }}</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <button v-if="failedCount > 0" class="jump-failures-btn" @click="scrollToFirstFailure">
+        <WarningOutlined />
+        {{ failedCount }} Failure{{ failedCount > 1 ? 's' : '' }}
+      </button>
+      <div class="header-status">
+        <CheckCircleFilled v-if="isPassed" class="status-icon" />
+        <CloseCircleFilled v-else class="status-icon" />
+        <span class="status-text">{{ isPassed ? 'PASSED' : 'FAILED' }}</span>
+      </div>
+    </div>
+  </div>
+</template>
+
 <style scoped>
 .report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   background: #fff;
-  border-radius: 8px;
-  padding: 24px 32px;
+  border-radius: 10px;
+  padding: 20px 28px;
   margin-bottom: 16px;
-  border: 1px solid #e8e8e8;
+  border: 1px solid #ebeef5;
 }
 .case-title {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
-  color: #1a1a1a;
-  margin: 0 0 12px 0;
+  color: #262626;
+  margin: 0 0 6px 0;
 }
 .header-meta {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
 }
-.status-tag {
+.meta-item {
+  font-size: 13px;
+  color: #8c8c8c;
+}
+.meta-divider {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #d9d9d9;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.jump-failures-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #ffccc7;
+  background: #fff1f0;
+  color: #cf1322;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.jump-failures-btn:hover {
+  background: #ffccc7;
+}
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 6px;
   font-weight: 600;
   font-size: 13px;
-  padding: 2px 12px;
+  letter-spacing: 0.5px;
 }
-.meta-text {
-  font-size: 13px;
-  color: #888;
+.report-header.passed .header-status {
+  background: #f6ffed;
+  color: #389e0d;
+}
+.report-header.failed .header-status {
+  background: #fff1f0;
+  color: #cf1322;
+}
+.status-icon {
+  font-size: 16px;
 }
 </style>

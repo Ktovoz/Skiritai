@@ -46,6 +46,7 @@ def normalize_step(step: dict, *, default_type: str = "action") -> dict:
     normalized["mode"] = step.get("mode") if step.get("mode") else None
 
     # ---- Optional fields ----
+    normalized["title"] = step.get("title")
     normalized["summary"] = step.get("summary")
     normalized["assertion"] = step.get("assertion")
     normalized["reason"] = step.get("reason")
