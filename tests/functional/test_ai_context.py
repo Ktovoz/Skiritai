@@ -321,3 +321,74 @@ class TestASTSandbox:
         # The first forbidden attr found should trigger the error
         with pytest.raises(ValueError, match="Forbidden attribute access"):
             _validate_replay_ast(tree)
+
+
+class TestSafeImport:
+    """Unit tests for _safe_import — the __import__ wrapper used in exec() sandbox."""
+
+    def test_allows_whitelisted_module_asyncio(self):
+        from skiritai.core.ai_context import _safe_import
+
+        mod = _safe_import("asyncio")
+        assert mod is not None
+
+    def test_allows_whitelisted_submodule_playwright_async_api(self):
+        from skiritai.core.ai_context import _safe_import
+
+        mod = _safe_import("playwright.async_api", fromlist=["async_playwright"])
+        assert mod is not None
+
+    def test_rejects_os_module(self):
+        from skiritai.core.ai_context import _safe_import
+
+        with pytest.raises(ImportError, match="not allowed"):
+            _safe_import("os")
+
+    def test_rejects_unknown_module(self):
+        from skiritai.core.ai_context import _safe_import
+
+        with pytest.raises(ImportError, match="not allowed"):
+            _safe_import("subprocess")
+
+    def test_exec_with_restricted_builtins_rejects_import_os(self):
+        from skiritai.core.ai_context import (
+            _FORBIDDEN_BUILTINS,
+            _safe_import,
+            _validate_replay_ast,
+        )
+        import builtins as _builtins_mod
+
+        safe_builtins = {
+            k: v for k, v in vars(_builtins_mod).items()
+            if k not in _FORBIDDEN_BUILTINS
+        }
+        safe_builtins["__import__"] = _safe_import
+
+        code = "import os\nos.getenv('HOME')\n"
+        tree = ast.parse(code)
+        _validate_replay_ast(tree)  # AST check passes (import is allowed)
+
+        exec_globals = {"__builtins__": safe_builtins}
+        with pytest.raises(ImportError, match="not allowed"):
+            exec(code, exec_globals)
+
+    def test_exec_with_restricted_builtins_allows_asyncio_import(self):
+        from skiritai.core.ai_context import (
+            _FORBIDDEN_BUILTINS,
+            _safe_import,
+            _validate_replay_ast,
+        )
+        import builtins as _builtins_mod
+
+        safe_builtins = {
+            k: v for k, v in vars(_builtins_mod).items()
+            if k not in _FORBIDDEN_BUILTINS
+        }
+        safe_builtins["__import__"] = _safe_import
+
+        code = "import asyncio\nx = asyncio\n"
+        tree = ast.parse(code)
+        _validate_replay_ast(tree)
+
+        exec_globals = {"__builtins__": safe_builtins}
+        exec(code, exec_globals)  # should not raise
