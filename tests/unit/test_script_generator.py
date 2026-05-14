@@ -256,8 +256,8 @@ class TestEscaping:
         for action, args in [
             ("navigate", {"url": "https://example.com"}),
             ("click", {"selector": "#btn"}),
-            ("click_force", {"selector": "#forced"}),
             ("click_text", {"text": "百度一下"}),
+            ("click_force", {"selector": "#forced"}),
             ("fill", {"selector": "#input", "text": "hello"}),
             ("type_text", {"selector": "#slow", "text": "world"}),
             ("focus", {"selector": "#focus"}),
