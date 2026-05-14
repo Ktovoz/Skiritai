@@ -1,6 +1,8 @@
 """Replay script generator — converts agent tool-call history into standalone Python scripts."""
 from __future__ import annotations
 
+import os
+
 from skiritai.core.agent_loop import PERCEPTION_TOOLS
 from skiritai.logger import logger
 
@@ -40,10 +42,15 @@ def generate_replay_script(step_id: str, agent_steps: list[dict]) -> str:
     if not action_lines:
         action_lines.append("    pass")
 
+    # Resolve headless at generation time so replay scripts don't need os.getenv.
+    # Same resolution order as browser.get_launch_args().
+    headless = (
+        os.getenv("SKIRITAI_HEADLESS") or os.getenv("HEADLESS", "false")
+    ).lower() in ("true", "1", "yes")
+
     lines = [
         '"""Auto-generated replay script — can be run independently."""',
         "import asyncio",
-        "import os",
         "from playwright.async_api import async_playwright",
         "",
         "",
@@ -56,8 +63,7 @@ def generate_replay_script(step_id: str, agent_steps: list[dict]) -> str:
         'if __name__ == "__main__":',
         "    async def main():",
         "        pw = await async_playwright().start()",
-        '        headless = (os.getenv("SKIRITAI_HEADLESS") or os.getenv("HEADLESS", "false")).lower() in ("true", "1", "yes")',
-        "        browser = await pw.chromium.launch(headless=headless)",
+        f"        browser = await pw.chromium.launch(headless={headless})",
         "        ctx = await browser.new_context()",
         "        page = await ctx.new_page()",
         "        try:",

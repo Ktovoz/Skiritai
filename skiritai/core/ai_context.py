@@ -47,7 +47,7 @@ _FORBIDDEN_BUILTINS = frozenset({
 # security boundary — __import__ is replaced with a wrapper that only
 # resolves these names (see _safe_import below).
 _SAFE_IMPORT_WHITELIST = frozenset({
-    "asyncio", "os", "playwright", "playwright.async_api",
+    "asyncio", "playwright", "playwright.async_api",
 })
 # Attribute names that must not be accessed (prevents object introspection escapes)
 _FORBIDDEN_ATTRS = frozenset({

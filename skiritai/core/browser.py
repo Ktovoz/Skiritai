@@ -26,6 +26,8 @@ def _atexit_cleanup() -> None:
             try:
                 os.kill(pid, signal.SIGTERM)
                 logger.info(f"[Browser] atexit: killed orphan browser pid={pid}")
+            except ProcessLookupError:
+                pass  # process already exited
             except OSError:
                 pass
         _launched_pids.clear()
