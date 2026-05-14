@@ -38,7 +38,15 @@ jobs:
         run: |
           TAG_VERSION="${{ steps.tag.outputs.version }}"
           IS_PRERELEASE="${{ steps.tag.outputs.is_prerelease }}"
-          BRANCH=$(git branch -r --contains "$GITHUB_SHA" 2>/dev/null | grep -E 'origin/(main|develop)$' | head -1 | sed 's|.*origin/||')
+          BRANCHES=$(git branch -r --contains "$GITHUB_SHA" 2>/dev/null | grep -E 'origin/(main|develop)$' || true)
+          # Prefer main when commit exists on both branches (e.g. after sync)
+          if echo "$BRANCHES" | grep -q 'origin/main'; then
+            BRANCH="main"
+          elif echo "$BRANCHES" | grep -q 'origin/develop'; then
+            BRANCH="develop"
+          else
+            BRANCH=""
+          fi
 
           # Fallback: on tag push (detached HEAD), infer branch from tag convention
           #   v*-a* / v*-b* / v*-rc* → develop
