@@ -12,8 +12,9 @@ export interface Verification {
 
 export interface StepEntry {
   step_id: string
+  type?: 'action' | 'verify' | 'screenshot'
   status: 'success' | 'failed'
-  mode: 'explore' | 'replay'
+  mode: 'explore' | 'replay' | 'verify' | 'screenshot' | null
   summary: string
   elapsed: number
   screenshots: Screenshot[]
