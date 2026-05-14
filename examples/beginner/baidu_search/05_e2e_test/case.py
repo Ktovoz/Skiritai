@@ -77,7 +77,6 @@ def _check_report(results_dir: Path) -> None:
         errors.append("报告中没有任何截图")
 
     # 4. HTML 报告中截图是否嵌入
-    report_html = (latest / "report.html").read_text()
     b64_count = report_html.count("data:image/png;base64,")
     if b64_count < ss_count:
         errors.append(f"HTML 中 base64 截图数量不足: {b64_count}/{ss_count}")
