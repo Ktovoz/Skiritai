@@ -230,8 +230,8 @@ async def hover(selector: str) -> str:
 async def analyze_page() -> str:
     """分析当前页面的 DOM 结构，返回所有可交互元素的详细信息。
 
-    当 AI 无法找到目标元素时，必须使用此工具获取页面的真实 DOM 结构，
-    而不是依赖训练数据中已知的选择器（选择器可能在页面更新后已失效）。
+    会穿透 Shadow DOM 查找所有嵌套元素。当 AI 无法找到目标元素时，
+    必须使用此工具获取页面的真实 DOM 结构，而不是依赖训练数据中已知的选择器。
 
     返回值是 JSON 格式，包含：
     - inputs: 所有可见输入框（tag, type, name, id, placeholder, selector）
@@ -251,14 +251,28 @@ async def analyze_page() -> str:
             };
             const mkSelector = (el) => {
                 if (el.id) return '#' + CSS.escape(el.id);
-                if (el.name) return '[name="' + el.name.replace(/"/g, '\\"') + '"]';
+                if (el.name) return '[name="' + el.name.replace(/"/g, '\\\\"') + '"]';
                 if (el.className && typeof el.className === 'string') {
-                    const cls = el.className.trim().split(/\\s+/)[0];
+                    const cls = el.className.trim().split(/\\\\s+/)[0];
                     if (cls) return el.tagName.toLowerCase() + '.' + CSS.escape(cls);
                 }
                 return el.tagName.toLowerCase();
             };
-            const inputs = [...document.querySelectorAll('input, textarea, select')]
+
+            // Collect elements from both light DOM and shadow DOM recursively
+            const collectAll = (root, selector) => {
+                const results = [...root.querySelectorAll(selector)];
+                // Recursively search inside shadow roots
+                const allElements = root.querySelectorAll('*');
+                for (const el of allElements) {
+                    if (el.shadowRoot) {
+                        results.push(...collectAll(el.shadowRoot, selector));
+                    }
+                }
+                return results;
+            };
+
+            const inputs = collectAll(document, 'input, textarea, select')
                 .filter(isVisible)
                 .slice(0, 30)
                 .map(el => ({
@@ -267,13 +281,14 @@ async def analyze_page() -> str:
                     name: el.name || '',
                     id: el.id || '',
                     placeholder: (el.placeholder || '').substring(0, 60),
-                    selector: mkSelector(el)
+                    selector: mkSelector(el),
+                    in_shadow_dom: el.getRootNode() !== document
                 }));
-            const buttons = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')]
+            const buttons = collectAll(document, 'button, input[type="submit"], input[type="button"], [role="button"]')
                 .filter(isVisible)
                 .slice(0, 20)
                 .map(el => {
-                    const hasSvg = el.querySelector('svg') !== null;
+                    const hasSvg = el.querySelector('svg') !== null || (el.shadowRoot && el.shadowRoot.querySelector('svg') !== null);
                     const hasIcon = el.className && /icon|search|menu|close|hamburger/i.test(el.className);
                     return {
                         tag: el.tagName.toLowerCase(),
@@ -283,10 +298,11 @@ async def analyze_page() -> str:
                         title: (el.getAttribute('title') || '').substring(0, 80),
                         classes: (typeof el.className === 'string' ? el.className.trim() : '').substring(0, 100),
                         has_svg: hasSvg,
-                        selector: mkSelector(el)
+                        selector: mkSelector(el),
+                        in_shadow_dom: el.getRootNode() !== document
                     };
                 });
-            const links = [...document.querySelectorAll('a[href]')]
+            const links = collectAll(document, 'a[href]')
                 .filter(isVisible)
                 .slice(0, 20)
                 .map(el => ({
