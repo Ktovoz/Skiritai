@@ -73,6 +73,9 @@ class BrowserSession:
         self._page = await self._context.new_page()
         self._started_at = time.time()
 
+        from skiritai.core.tools import set_browser
+        set_browser(self._browser, self._context)
+
     async def stop(self) -> None:
         """Close browser and stop Playwright."""
         if self._context:

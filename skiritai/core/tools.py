@@ -9,11 +9,19 @@ from typing import Any
 from skiritai.core.tool_registry import register_tool
 
 _page_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_page_ctx", default=None)
+_browser_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_browser_ctx", default=None)
+_context_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_context_ctx", default=None)
 
 
 def set_page(page: Any):
     """Set the active Playwright page for tools to use."""
     _page_ctx.set(page)
+
+
+def set_browser(browser: Any, context: Any):
+    """Set the Playwright Browser and BrowserContext references."""
+    _browser_ctx.set(browser)
+    _context_ctx.set(context)
 
 
 def get_page() -> Any:
@@ -325,3 +333,96 @@ async def screenshot(name: str = "screenshot") -> str:
     path = str(Path(tempfile.gettempdir()) / f"testagent_{name}.png")
     await page.screenshot(path=path, full_page=True)
     return f"截图已保存到 {path}"
+
+
+@register_tool
+async def configure_browser(
+    ignore_https_errors: bool | None = None,
+    viewport: str | None = None,
+    user_agent: str | None = None,
+    locale: str | None = None,
+    timezone_id: str | None = None,
+    color_scheme: str | None = None,
+    java_script_enabled: bool | None = None,
+) -> str:
+    """修改浏览器配置。会重建浏览器上下文并保留当前页面状态（cookies、URL）。
+
+    遇到 SSL/证书错误时，调用 configure_browser(ignore_https_errors=True) 后重试导航。
+    需要切换语言、时区、User-Agent 等时也可以使用此工具。
+
+    Args:
+        ignore_https_errors: 是否忽略 SSL 证书错误
+        viewport: 视口大小，格式为 '宽x高'，如 '1920x1080'
+        user_agent: 自定义 User-Agent 字符串
+        locale: 浏览器语言，如 'zh-CN', 'en-US'
+        timezone_id: 时区，如 'Asia/Shanghai'
+        color_scheme: 配色方案 'light' 或 'dark'
+        java_script_enabled: 是否启用 JavaScript
+    """
+    browser = _browser_ctx.get()
+    old_context = _context_ctx.get()
+    old_page = _page_ctx.get()
+
+    if browser is None or old_context is None:
+        return "错误：浏览器尚未初始化"
+
+    # Build new context options
+    ctx_options: dict[str, Any] = {}
+    if ignore_https_errors is not None:
+        ctx_options["ignore_https_errors"] = ignore_https_errors
+    if viewport:
+        parts = viewport.lower().split("x")
+        if len(parts) == 2:
+            ctx_options["viewport"] = {"width": int(parts[0]), "height": int(parts[1])}
+    if user_agent:
+        ctx_options["user_agent"] = user_agent
+    if locale:
+        ctx_options["locale"] = locale
+    if timezone_id:
+        ctx_options["timezone_id"] = timezone_id
+    if color_scheme:
+        ctx_options["color_scheme"] = color_scheme
+    if java_script_enabled is not None:
+        ctx_options["java_script_enabled"] = java_script_enabled
+
+    if not ctx_options:
+        return "未指定任何配置项，无需修改"
+
+    # Save current state
+    current_url = old_page.url if old_page else "about:blank"
+    try:
+        storage = await old_context.storage_state()
+        cookies = storage.get("cookies", [])
+    except Exception:
+        cookies = []
+
+    # Create new context with updated settings
+    new_context = await browser.new_context(**ctx_options)
+
+    # Restore cookies
+    if cookies:
+        try:
+            await new_context.add_cookies(cookies)
+        except Exception:
+            pass
+
+    # Create new page and navigate
+    new_page = await new_context.new_page()
+    if current_url and current_url != "about:blank":
+        try:
+            await new_page.goto(current_url, wait_until="domcontentloaded", timeout=15000)
+        except Exception:
+            pass
+
+    # Close old context
+    try:
+        await old_context.close()
+    except Exception:
+        pass
+
+    # Update global references
+    _context_ctx.set(new_context)
+    _page_ctx.set(new_page)
+
+    changed = ", ".join(f"{k}={v}" for k, v in ctx_options.items())
+    return f"浏览器配置已更新: {changed}。当前页面: {new_page.url}"
