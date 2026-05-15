@@ -1,0 +1,7 @@
+*.pyc
+__pycache__/
+results/
+test_results/
+scripts/
+*.html
+.test_venv/

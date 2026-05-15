@@ -500,8 +500,17 @@ class BaseCase:
             status = "success" if result.get("success") else "failed"
             ai._step_elapsed = time.time() - ai._step_started_at
 
+            # Infer step type from operations: verify > action > screenshot
+            if "verify" in ai._ops and "action" not in ai._ops:
+                step_type = "verify"
+            elif "screenshot" in ai._ops and "action" not in ai._ops and "verify" not in ai._ops:
+                step_type = "screenshot"
+            else:
+                step_type = "action"
+
             step_entry = {
                 "step_id": step_name,
+                "type": step_type,
                 "status": status,
                 "mode": "replay" if ai.has_replay() else "explore",
                 "summary": result.get("summary", ""),

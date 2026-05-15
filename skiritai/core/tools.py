@@ -1,11 +1,13 @@
 """Playwright tools for LangGraph agent — text only, no vision."""
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from skiritai.core.llm_retry import _is_navigation_error
 from skiritai.core.tool_registry import register_tool
 from skiritai.logger import logger
 
@@ -47,6 +49,27 @@ def get_page() -> Any:
     return page
 
 
+async def safe_evaluate(page: Any, expression: str, max_retries: int = 2, delay: float = 1.0) -> Any:
+    """page.evaluate() with automatic retry on SPA navigation context destruction.
+
+    Args:
+        max_retries: 额外重试次数（不含首次尝试），默认 2 表示最多 3 次总尝试。
+        delay: 基础重试延迟秒数，每次重试延迟 = delay * (attempt + 1)。
+    """
+    for attempt in range(max_retries + 1):
+        try:
+            return await page.evaluate(expression)
+        except Exception as e:
+            if attempt >= max_retries:
+                raise
+            if _is_navigation_error(e):
+                logger.warning(f"[Tools] page.evaluate() failed due to navigation, "
+                               f"retrying ({attempt + 1}/{max_retries})...")
+                await asyncio.sleep(delay * (attempt + 1))
+            else:
+                raise
+
+
 @register_tool
 async def navigate(url: str) -> str:
     """导航到指定 URL。
@@ -58,6 +81,11 @@ async def navigate(url: str) -> str:
     await page.goto(url, wait_until="domcontentloaded", timeout=30000)
     try:
         await page.wait_for_load_state("networkidle", timeout=5000)
+    except Exception:
+        pass
+    # SPA 二次导航稳定：再等一轮 networkidle（较短超时）
+    try:
+        await page.wait_for_load_state("networkidle", timeout=3000)
     except Exception:
         pass
     return f"已导航到 {page.url}"
@@ -200,7 +228,7 @@ async def get_page_info() -> str:
     page = get_page()
     title = await page.title()
     url = page.url
-    body_text = await page.evaluate("document.body?.innerText?.substring(0, 2000) || ''")
+    body_text = await safe_evaluate(page, "document.body?.innerText?.substring(0, 2000) || ''")
     return f"标题: {title}\nURL: {url}\n页面文本:\n{body_text}"
 
 
@@ -212,7 +240,7 @@ async def eval_js(expression: str) -> str:
         expression: 要执行的 JS 表达式
     """
     page = get_page()
-    result = await page.evaluate(expression)
+    result = await safe_evaluate(page, expression)
     return f"JS 执行结果: {result}"
 
 
@@ -254,7 +282,7 @@ async def analyze_page() -> str:
     - links: 可见链接（text, href），最多 20 条
     """
     page = get_page()
-    return await page.evaluate("""
+    return await safe_evaluate(page, """
         (() => {
             const isVisible = (el) => {
                 const style = window.getComputedStyle(el);
@@ -335,6 +363,82 @@ async def analyze_page() -> str:
             }, null, 2);
         })()
     """)
+
+
+@register_tool
+async def dismiss_overlay() -> str:
+    """检测并关闭页面上的遮挡元素（登录弹窗、对话框、广告浮层等）。
+
+    按优先级依次尝试：
+    1. 查找弹窗内的关闭按钮并点击
+    2. 按 Escape 键关闭
+    3. 移除常见遮罩层 DOM 元素
+
+    适用于：登录弹窗、广告弹窗、Cookie 提示、引导遮罩等。
+    """
+    page = get_page()
+
+    js = """
+    (() => {
+        const overlays = document.querySelectorAll(
+            '[role="dialog"], [id*="login"], [id*="modal"], [class*="overlay"], ' +
+            '[class*="mask"], [class*="popup"], [class*="modal"], [class*="dialog"], ' +
+            '[class*="interstitial"], [id*="popup"]'
+        );
+        let closed = [];
+        let removed = [];
+
+        for (const el of overlays) {
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden') continue;
+            const rect = el.getBoundingClientRect();
+            if (rect.width === 0 && rect.height === 0) continue;
+
+            // Try close button first
+            const closeBtn = el.querySelector(
+                '[class*="close"], [class*="dismiss"], [aria-label*="close" i], ' +
+                '[aria-label*="关闭"], button'
+            );
+            if (closeBtn) {
+                const text = (closeBtn.textContent || '').trim();
+                if (text === '×' || text === '✕' || text === 'X' ||
+                    /close|关闭|取消|skip|跳过/i.test(text) ||
+                    /close|关闭/i.test(closeBtn.getAttribute('aria-label') || '')) {
+                    closeBtn.click();
+                    closed.push(el.id || el.className.substring(0, 40));
+                    continue;
+                }
+            }
+            // No close button found, remove from DOM
+            el.remove();
+            removed.push(el.id || el.className.substring(0, 40));
+        }
+
+        // Clean up body scroll lock
+        if (document.body.style.overflow === 'hidden') {
+            document.body.style.overflow = '';
+        }
+
+        return JSON.stringify({closed, removed});
+    })()
+    """
+
+    try:
+        result = await safe_evaluate(page, js)
+        import json
+        info = json.loads(result)
+        parts = []
+        if info["closed"]:
+            parts.append(f"已点击关闭按钮: {info['closed']}")
+        if info["removed"]:
+            parts.append(f"已移除遮罩元素: {info['removed']}")
+        if not parts:
+            return "未检测到遮挡元素"
+        return "；".join(parts)
+    except Exception as e:
+        logger.warning(f"[dismiss_overlay] JS detection failed: {e}, falling back to Escape")
+        await page.keyboard.press("Escape")
+        return "JS 检测失败，已按 Escape 键尝试关闭"
 
 
 @register_tool
