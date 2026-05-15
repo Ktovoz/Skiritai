@@ -1,0 +1,23 @@
+name: 抖音精选搜索（YAML + 配置文件）
+steps:
+  - name: 打开抖音精选首页
+    action: 打开 https://www.douyin.com/jingxuan 首页
+
+  - name: 关闭登录弹窗
+    action: 关闭页面上的登录弹窗
+
+  - name: 验证首页
+    verify: 页面顶部有搜索框，页面主体区域展示了视频卡片内容
+
+  - name: 搜索关键词
+    action: 在页面顶部中间位置找到搜索框，点击搜索框使其获得焦点，然后输入关键词"陈伯全能王"，输入完成后按 Enter 键提交搜索。确认页面已跳转到搜索结果页面
+
+  - name: 验证搜索结果
+    verify: 搜索结果页面显示了与"陈伯全能王"相关的内容
+
+  - name: 查看用户详情
+    action: 在搜索结果中找到"陈伯全能王"相关的用户或视频，点击进入查看详情。如果无法找到确切匹配，说明情况并跳过
+    on_failure: skip
+
+  - name: 截图保存
+    screenshot: final_state

@@ -168,6 +168,7 @@ class AIContext:
         self._page_info: str = ""
         self._screenshots: list[dict] = []
         self._verifications: list[dict] = []
+        self._ops: list[str] = []
         self._step_started_at: float = 0.0
         self._step_elapsed: float = 0.0
 
@@ -223,6 +224,7 @@ class AIContext:
         path = str(Path(tempfile.gettempdir()) / f"skiritai_{self.step_id}_{name}.png")
         await self.page.screenshot(path=path, full_page=True)
         self._screenshots.append({"name": name, "path": path, "timestamp": self._step_started_at})
+        self._ops.append("screenshot")
         logger.info(f"[Screenshot] {self.step_id}/{name} saved")
         return path
 
@@ -315,6 +317,7 @@ class AIContext:
                 "reason": reason,
                 "screenshot": screenshot_path,
             })
+            self._ops.append("verify")
 
             if passed:
                 logger.success(f"[Verify] PASS: {assertion[:80]}")
@@ -330,6 +333,7 @@ class AIContext:
                 "reason": str(e),
                 "screenshot": None,
             })
+            self._ops.append("verify")
             return {"passed": False, "reason": str(e), "screenshot": None}
 
     def copy_for_step(self, step_id: str) -> AIContext:
@@ -412,6 +416,7 @@ class AIContext:
                 result = await self._explore(description)
         result["mode"] = actual_mode
         self._last_result = result
+        self._ops.append("action")
         return result
 
     async def _replay(self) -> dict:

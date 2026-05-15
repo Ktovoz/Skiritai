@@ -265,9 +265,9 @@ async def _get_dom_state() -> dict[int, dict]:
     Returns:
         dict[int, dict] — 1-indexed selector_map
     """
-    from skiritai.core.tools import get_page
+    from skiritai.core.tools import get_page, safe_evaluate
     page = get_page()
-    raw = await page.evaluate(_JS_DOM_SERIALIZER)
+    raw = await safe_evaluate(page, _JS_DOM_SERIALIZER)
     return _build_selector_map(raw)
 
 

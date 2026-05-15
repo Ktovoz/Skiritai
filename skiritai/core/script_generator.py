@@ -120,6 +120,9 @@ def _action_to_line(action: str, args: dict) -> str | None:
         # repr() handles all edge cases: quotes, backticks, newlines, etc.
         return f"    result = await page.evaluate({repr(expr)})"
 
+    if action == "dismiss_overlay":
+        return "    await page.keyboard.press('Escape')\n    await asyncio.sleep(0.5)"
+
     if action == "select_option":
         return f'    await page.select_option("{_esc(args.get("selector", ""))}", "{_esc(args.get("value", ""))}")'
 

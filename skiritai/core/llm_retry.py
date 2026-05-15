@@ -35,11 +35,24 @@ def _is_rate_limited(exc: Exception) -> bool:
     return False
 
 
+def _is_navigation_error(exc: Exception) -> bool:
+    """Check if the exception indicates a Playwright context destruction from navigation."""
+    msg = str(exc)
+    return (
+        "Execution context was destroyed" in msg
+        or "most likely because of a navigation" in msg
+        or "frame was detached" in msg
+        or "Target closed" in msg
+    )
+
+
 def _is_retryable(exc: Exception) -> bool:
     """Determine if an exception is worth retrying."""
     if isinstance(exc, _RETRYABLE_EXCEPTIONS):
         return True
     if _is_rate_limited(exc):
+        return True
+    if _is_navigation_error(exc):
         return True
     # Check for common LangChain/LangGraph wrapped exceptions
     cause = getattr(exc, "__cause__", None) or getattr(exc, "__context__", None)
