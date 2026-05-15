@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from skiritai.core.llm_retry import _is_navigation_error
 from skiritai.core.tool_registry import register_tool
 from skiritai.logger import logger
 
@@ -49,15 +50,19 @@ def get_page() -> Any:
 
 
 async def safe_evaluate(page: Any, expression: str, max_retries: int = 2, delay: float = 1.0) -> Any:
-    """page.evaluate() with automatic retry on SPA navigation context destruction."""
+    """page.evaluate() with automatic retry on SPA navigation context destruction.
+
+    Args:
+        max_retries: 额外重试次数（不含首次尝试），默认 2 表示最多 3 次总尝试。
+        delay: 基础重试延迟秒数，每次重试延迟 = delay * (attempt + 1)。
+    """
     for attempt in range(max_retries + 1):
         try:
             return await page.evaluate(expression)
         except Exception as e:
             if attempt >= max_retries:
                 raise
-            msg = str(e)
-            if "context was destroyed" in msg or "frame was detached" in msg:
+            if _is_navigation_error(e):
                 logger.warning(f"[Tools] page.evaluate() failed due to navigation, "
                                f"retrying ({attempt + 1}/{max_retries})...")
                 await asyncio.sleep(delay * (attempt + 1))
@@ -78,9 +83,9 @@ async def navigate(url: str) -> str:
         await page.wait_for_load_state("networkidle", timeout=5000)
     except Exception:
         pass
-    # SPA 二次导航稳定：再等一轮 networkidle
+    # SPA 二次导航稳定：再等一轮 networkidle（较短超时）
     try:
-        await page.wait_for_load_state("networkidle", timeout=5000)
+        await page.wait_for_load_state("networkidle", timeout=3000)
     except Exception:
         pass
     return f"已导航到 {page.url}"

@@ -503,6 +503,8 @@ class BaseCase:
             # Infer step type from operations: verify > action > screenshot
             if "verify" in ai._ops and "action" not in ai._ops:
                 step_type = "verify"
+            elif "screenshot" in ai._ops and "action" not in ai._ops and "verify" not in ai._ops:
+                step_type = "screenshot"
             else:
                 step_type = "action"
 
