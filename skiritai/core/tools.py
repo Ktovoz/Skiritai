@@ -7,13 +7,36 @@ from pathlib import Path
 from typing import Any
 
 from skiritai.core.tool_registry import register_tool
+from skiritai.logger import logger
 
 _page_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_page_ctx", default=None)
+_browser_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_browser_ctx", default=None)
+_context_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_context_ctx", default=None)
+
+# Callback invoked when configure_browser replaces the context/page.
+# BrowserSession registers this to keep its internal refs in sync.
+# Uses single-callback overwrite to avoid duplicate registration on start/stop cycles.
+_on_context_replaced: Any = None
 
 
 def set_page(page: Any):
     """Set the active Playwright page for tools to use."""
     _page_ctx.set(page)
+
+
+def set_browser(browser: Any, context: Any):
+    """Set the Playwright Browser and BrowserContext references."""
+    _browser_ctx.set(browser)
+    _context_ctx.set(context)
+
+
+def on_context_replaced(callback):
+    """Register a callback to be called when configure_browser replaces context/page.
+
+    The callback receives (new_context, new_page). Overwrites any previous callback.
+    """
+    global _on_context_replaced
+    _on_context_replaced = callback
 
 
 def get_page() -> Any:
@@ -222,8 +245,8 @@ async def hover(selector: str) -> str:
 async def analyze_page() -> str:
     """分析当前页面的 DOM 结构，返回所有可交互元素的详细信息。
 
-    当 AI 无法找到目标元素时，必须使用此工具获取页面的真实 DOM 结构，
-    而不是依赖训练数据中已知的选择器（选择器可能在页面更新后已失效）。
+    会穿透 Shadow DOM 查找所有嵌套元素。当 AI 无法找到目标元素时，
+    必须使用此工具获取页面的真实 DOM 结构，而不是依赖训练数据中已知的选择器。
 
     返回值是 JSON 格式，包含：
     - inputs: 所有可见输入框（tag, type, name, id, placeholder, selector）
@@ -243,14 +266,28 @@ async def analyze_page() -> str:
             };
             const mkSelector = (el) => {
                 if (el.id) return '#' + CSS.escape(el.id);
-                if (el.name) return '[name="' + el.name.replace(/"/g, '\\"') + '"]';
+                if (el.name) return '[name="' + el.name.replace(/"/g, '\\\\"') + '"]';
                 if (el.className && typeof el.className === 'string') {
                     const cls = el.className.trim().split(/\\s+/)[0];
                     if (cls) return el.tagName.toLowerCase() + '.' + CSS.escape(cls);
                 }
                 return el.tagName.toLowerCase();
             };
-            const inputs = [...document.querySelectorAll('input, textarea, select')]
+
+            // Collect elements from both light DOM and shadow DOM recursively
+            const collectAll = (root, selector) => {
+                const results = [...root.querySelectorAll(selector)];
+                // Recursively search inside shadow roots
+                const allElements = root.querySelectorAll('*');
+                for (const el of allElements) {
+                    if (el.shadowRoot) {
+                        results.push(...collectAll(el.shadowRoot, selector));
+                    }
+                }
+                return results;
+            };
+
+            const inputs = collectAll(document, 'input, textarea, select')
                 .filter(isVisible)
                 .slice(0, 30)
                 .map(el => ({
@@ -259,13 +296,14 @@ async def analyze_page() -> str:
                     name: el.name || '',
                     id: el.id || '',
                     placeholder: (el.placeholder || '').substring(0, 60),
-                    selector: mkSelector(el)
+                    selector: mkSelector(el),
+                    in_shadow_dom: el.getRootNode() !== document
                 }));
-            const buttons = [...document.querySelectorAll('button, input[type="submit"], input[type="button"], [role="button"]')]
+            const buttons = collectAll(document, 'button, input[type="submit"], input[type="button"], [role="button"]')
                 .filter(isVisible)
                 .slice(0, 20)
                 .map(el => {
-                    const hasSvg = el.querySelector('svg') !== null;
+                    const hasSvg = el.querySelector('svg') !== null || (el.shadowRoot && el.shadowRoot.querySelector('svg') !== null);
                     const hasIcon = el.className && /icon|search|menu|close|hamburger/i.test(el.className);
                     return {
                         tag: el.tagName.toLowerCase(),
@@ -275,15 +313,17 @@ async def analyze_page() -> str:
                         title: (el.getAttribute('title') || '').substring(0, 80),
                         classes: (typeof el.className === 'string' ? el.className.trim() : '').substring(0, 100),
                         has_svg: hasSvg,
-                        selector: mkSelector(el)
+                        selector: mkSelector(el),
+                        in_shadow_dom: el.getRootNode() !== document
                     };
                 });
-            const links = [...document.querySelectorAll('a[href]')]
+            const links = collectAll(document, 'a[href]')
                 .filter(isVisible)
                 .slice(0, 20)
                 .map(el => ({
                     text: (el.textContent || '').trim().substring(0, 60),
-                    href: el.href
+                    href: el.href,
+                    in_shadow_dom: el.getRootNode() !== document
                 }));
             return JSON.stringify({
                 url: location.href,
@@ -325,3 +365,118 @@ async def screenshot(name: str = "screenshot") -> str:
     path = str(Path(tempfile.gettempdir()) / f"testagent_{name}.png")
     await page.screenshot(path=path, full_page=True)
     return f"截图已保存到 {path}"
+
+
+@register_tool
+async def configure_browser(
+    ignore_https_errors: bool | None = None,
+    viewport: str | None = None,
+    user_agent: str | None = None,
+    locale: str | None = None,
+    timezone_id: str | None = None,
+    color_scheme: str | None = None,
+    java_script_enabled: bool | None = None,
+) -> str:
+    """修改浏览器配置。会重建浏览器上下文并保留当前页面状态（cookies、URL）。
+
+    遇到 SSL/证书错误时，调用 configure_browser(ignore_https_errors=True) 后重试导航。
+    需要切换语言、时区、User-Agent 等时也可以使用此工具。
+
+    Args:
+        ignore_https_errors: 是否忽略 SSL 证书错误
+        viewport: 视口大小，格式为 '宽x高'，如 '1920x1080'
+        user_agent: 自定义 User-Agent 字符串
+        locale: 浏览器语言，如 'zh-CN', 'en-US'
+        timezone_id: 时区，如 'Asia/Shanghai'
+        color_scheme: 配色方案 'light' 或 'dark'
+        java_script_enabled: 是否启用 JavaScript
+    """
+    browser = _browser_ctx.get()
+    old_context = _context_ctx.get()
+    old_page = _page_ctx.get()
+
+    if browser is None or old_context is None:
+        return "错误：浏览器尚未初始化"
+
+    # Build new context options
+    ctx_options: dict[str, Any] = {}
+    if ignore_https_errors is not None:
+        ctx_options["ignore_https_errors"] = ignore_https_errors
+    if viewport:
+        parts = viewport.lower().split("x")
+        if len(parts) == 2:
+            try:
+                w, h = int(parts[0]), int(parts[1])
+                if w > 0 and h > 0:
+                    ctx_options["viewport"] = {"width": w, "height": h}
+                else:
+                    return f"错误：视口尺寸必须为正数，收到 {w}x{h}"
+            except ValueError:
+                return f"错误：视口格式无效 '{viewport}'，应为 '宽x高' 如 '1920x1080'"
+    if user_agent:
+        ctx_options["user_agent"] = user_agent
+    if locale:
+        ctx_options["locale"] = locale
+    if timezone_id:
+        ctx_options["timezone_id"] = timezone_id
+    if color_scheme:
+        if color_scheme not in ("light", "dark", "no-preference"):
+            return f"错误：color_scheme 必须为 'light'、'dark' 或 'no-preference'，收到 '{color_scheme}'"
+        ctx_options["color_scheme"] = color_scheme
+    if java_script_enabled is not None:
+        ctx_options["java_script_enabled"] = java_script_enabled
+
+    if not ctx_options:
+        return "未指定任何配置项，无需修改"
+
+    # Save current state
+    current_url = old_page.url if old_page else "about:blank"
+    try:
+        storage = await old_context.storage_state()
+        cookies = storage.get("cookies", [])
+    except Exception as e:
+        logger.warning(f"[configure_browser] Failed to save storage state: {e}")
+        cookies = []
+
+    # Create new context with updated settings
+    new_context = await browser.new_context(**ctx_options)
+
+    # Restore cookies
+    if cookies:
+        try:
+            await new_context.add_cookies(cookies)
+        except Exception as e:
+            logger.warning(f"[configure_browser] Failed to restore cookies: {e}")
+
+    # Create new page and navigate
+    new_page = await new_context.new_page()
+    nav_failed = False
+    if current_url and current_url != "about:blank":
+        try:
+            await new_page.goto(current_url, wait_until="domcontentloaded", timeout=15000)
+        except Exception as e:
+            logger.warning(f"[configure_browser] Failed to navigate to {current_url}: {e}")
+            nav_failed = True
+
+    # Close old context
+    try:
+        await old_context.close()
+    except Exception as e:
+        logger.warning(f"[configure_browser] Failed to close old context: {e}")
+
+    # Update global references
+    _context_ctx.set(new_context)
+    _page_ctx.set(new_page)
+
+    # Notify BrowserSession to sync internal refs
+    if _on_context_replaced is not None:
+        try:
+            _on_context_replaced(new_context, new_page)
+        except Exception as e:
+            logger.warning(f"[configure_browser] context_replaced callback failed: {e}")
+
+    changed = ", ".join(f"{k}={v}" for k, v in ctx_options.items())
+    result = f"浏览器配置已更新: {changed}。当前页面: {new_page.url}"
+    if nav_failed:
+        result += "（警告：页面恢复失败，当前为空白页，请重新 navigate）"
+    return result
