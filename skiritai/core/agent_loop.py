@@ -271,8 +271,8 @@ async def run_agent(
     # Store browser/context references for configure_browser tool
     try:
         set_browser(page.context.browser, page.context)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[Agent] Failed to set browser refs: {e}")
 
     # Resolve system prompt (case-level > env > default)
     system_prompt = load_system_prompt(case_dir)

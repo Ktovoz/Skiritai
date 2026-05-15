@@ -7,10 +7,15 @@ from pathlib import Path
 from typing import Any
 
 from skiritai.core.tool_registry import register_tool
+from skiritai.logger import logger
 
 _page_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_page_ctx", default=None)
 _browser_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_browser_ctx", default=None)
 _context_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_context_ctx", default=None)
+
+# Callback invoked when configure_browser replaces the context/page.
+# BrowserSession registers this to keep its internal refs in sync.
+_on_context_replaced: list[Any] = []
 
 
 def set_page(page: Any):
@@ -22,6 +27,14 @@ def set_browser(browser: Any, context: Any):
     """Set the Playwright Browser and BrowserContext references."""
     _browser_ctx.set(browser)
     _context_ctx.set(context)
+
+
+def on_context_replaced(callback):
+    """Register a callback to be called when configure_browser replaces context/page.
+
+    The callback receives (new_context, new_page).
+    """
+    _on_context_replaced.append(callback)
 
 
 def get_page() -> Any:
@@ -253,7 +266,7 @@ async def analyze_page() -> str:
                 if (el.id) return '#' + CSS.escape(el.id);
                 if (el.name) return '[name="' + el.name.replace(/"/g, '\\\\"') + '"]';
                 if (el.className && typeof el.className === 'string') {
-                    const cls = el.className.trim().split(/\\\\s+/)[0];
+                    const cls = el.className.trim().split(/\\s+/)[0];
                     if (cls) return el.tagName.toLowerCase() + '.' + CSS.escape(cls);
                 }
                 return el.tagName.toLowerCase();
@@ -307,7 +320,8 @@ async def analyze_page() -> str:
                 .slice(0, 20)
                 .map(el => ({
                     text: (el.textContent || '').trim().substring(0, 60),
-                    href: el.href
+                    href: el.href,
+                    in_shadow_dom: el.getRootNode() !== document
                 }));
             return JSON.stringify({
                 url: location.href,
@@ -389,7 +403,14 @@ async def configure_browser(
     if viewport:
         parts = viewport.lower().split("x")
         if len(parts) == 2:
-            ctx_options["viewport"] = {"width": int(parts[0]), "height": int(parts[1])}
+            try:
+                w, h = int(parts[0]), int(parts[1])
+                if w > 0 and h > 0:
+                    ctx_options["viewport"] = {"width": w, "height": h}
+                else:
+                    return f"错误：视口尺寸必须为正数，收到 {w}x{h}"
+            except ValueError:
+                return f"错误：视口格式无效 '{viewport}'，应为 '宽x高' 如 '1920x1080'"
     if user_agent:
         ctx_options["user_agent"] = user_agent
     if locale:
@@ -397,6 +418,8 @@ async def configure_browser(
     if timezone_id:
         ctx_options["timezone_id"] = timezone_id
     if color_scheme:
+        if color_scheme not in ("light", "dark", "no-preference"):
+            return f"错误：color_scheme 必须为 'light'、'dark' 或 'no-preference'，收到 '{color_scheme}'"
         ctx_options["color_scheme"] = color_scheme
     if java_script_enabled is not None:
         ctx_options["java_script_enabled"] = java_script_enabled
@@ -409,7 +432,8 @@ async def configure_browser(
     try:
         storage = await old_context.storage_state()
         cookies = storage.get("cookies", [])
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[configure_browser] Failed to save storage state: {e}")
         cookies = []
 
     # Create new context with updated settings
@@ -419,26 +443,33 @@ async def configure_browser(
     if cookies:
         try:
             await new_context.add_cookies(cookies)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[configure_browser] Failed to restore cookies: {e}")
 
     # Create new page and navigate
     new_page = await new_context.new_page()
     if current_url and current_url != "about:blank":
         try:
             await new_page.goto(current_url, wait_until="domcontentloaded", timeout=15000)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[configure_browser] Failed to navigate to {current_url}: {e}")
 
     # Close old context
     try:
         await old_context.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[configure_browser] Failed to close old context: {e}")
 
     # Update global references
     _context_ctx.set(new_context)
     _page_ctx.set(new_page)
+
+    # Notify BrowserSession to sync internal refs
+    for cb in _on_context_replaced:
+        try:
+            cb(new_context, new_page)
+        except Exception:
+            pass
 
     changed = ", ".join(f"{k}={v}" for k, v in ctx_options.items())
     return f"浏览器配置已更新: {changed}。当前页面: {new_page.url}"

@@ -73,8 +73,14 @@ class BrowserSession:
         self._page = await self._context.new_page()
         self._started_at = time.time()
 
-        from skiritai.core.tools import set_browser
+        from skiritai.core.tools import set_browser, on_context_replaced
         set_browser(self._browser, self._context)
+        on_context_replaced(self._on_context_replaced)
+
+    def _on_context_replaced(self, new_context, new_page):
+        """Sync internal refs when configure_browser recreates the context."""
+        self._context = new_context
+        self._page = new_page
 
     async def stop(self) -> None:
         """Close browser and stop Playwright."""
