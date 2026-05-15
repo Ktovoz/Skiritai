@@ -574,8 +574,55 @@ async def analyze_page() -> str:
 
             const buttons = collectAll(document, 'button, input[type="submit"], input[type="button"], [role="button"]')
                 .filter(isVisible)
-                .slice(0, 20)
-                .map(el => {
+                .map(el => ({el, isButton: true}));
+
+            // Also find clickable non-button elements (span, div, etc.) that look like buttons
+            // These are elements with cursor:pointer, tabindex, onclick, or button-like classes
+            const clickableCandidates = collectAll(document,
+                'span, div, li, [tabindex], [onclick], [role="link"]'
+            ).filter(isVisible).filter(el => {
+                // Skip if already in the buttons collection
+                if (/^(button|input|select|textarea|a)$/i.test(el.tagName)) return false;
+                // Skip tiny/invisible text
+                const t = (el.textContent || '').trim();
+                if (!t || t.length > 80) return false;
+                // Skip if it's just a wrapper with many children (layout div)
+                if (el.children.length > 5) return false;
+                // Detect clickable signals
+                const style = window.getComputedStyle(el);
+                const cursor = style.cursor;
+                const tabindex = el.getAttribute('tabindex');
+                const onclick = el.getAttribute('onclick');
+                const role = (el.getAttribute('role') || '').toLowerCase();
+                const cls = (typeof el.className === 'string' ? el.className.toLowerCase() : '');
+                // Is clickable if any signal matches
+                return cursor === 'pointer'
+                    || tabindex !== null
+                    || onclick !== null
+                    || role === 'button' || role === 'link'
+                    || /btn|button|clickable|action|tab|item|menu|nav/.test(cls);
+            }).map(el => ({el, isButton: false}));
+
+            // Merge and deduplicate (by DOM element reference)
+            const allClickable = [...buttons];
+            const seenEls = new Set(buttons.map(b => b.el));
+            clickableCandidates.forEach(c => {
+                // Avoid adding an element whose ancestor is already in the list
+                if (!seenEls.has(c.el)) {
+                    let dominated = false;
+                    for (const s of seenEls) {
+                        if (s.contains(c.el) || c.el.contains(s)) { dominated = true; break; }
+                    }
+                    if (!dominated) {
+                        allClickable.push(c);
+                        seenEls.add(c.el);
+                    }
+                }
+            });
+
+            const mergedButtons = allClickable
+                .slice(0, 30)
+                .map(({el}) => {
                     const rect = el.getBoundingClientRect();
                     const hasSvg = el.querySelector('svg') !== null || (el.shadowRoot && el.shadowRoot.querySelector('svg') !== null);
                     const btnText = (el.textContent || el.value || '').trim().substring(0, 60);
@@ -626,7 +673,7 @@ async def analyze_page() -> str:
                     }
                 });
             };
-            addDisambiguation(buttons, 'text');
+            addDisambiguation(mergedButtons, 'text');
             addDisambiguation(links, 'text');
 
             // Build area-grouped structure for clearer spatial reasoning
@@ -640,13 +687,13 @@ async def analyze_page() -> str:
             };
             const seenAreas = new Set();
             inputs.forEach(el => { if (el.area) seenAreas.add(el.area); });
-            buttons.forEach(el => { if (el.area) seenAreas.add(el.area); });
+            mergedButtons.forEach(el => { if (el.area) seenAreas.add(el.area); });
             links.forEach(el => { if (el.area) seenAreas.add(el.area); });
 
             const layout = {};
             seenAreas.forEach(area => {
                 const areaInputs = inputs.filter(el => el.area === area);
-                const areaButtons = buttons.filter(el => el.area === area);
+                const areaButtons = mergedButtons.filter(el => el.area === area);
                 const areaLinks = links.filter(el => el.area === area);
                 const parts = [];
                 if (areaInputs.length) parts.push(areaInputs.length + '个输入框');
@@ -659,7 +706,7 @@ async def analyze_page() -> str:
             });
             // Elements without area
             const noAreaInputs = inputs.filter(el => !el.area);
-            const noAreaButtons = buttons.filter(el => !el.area);
+            const noAreaButtons = mergedButtons.filter(el => !el.area);
             const noAreaLinks = links.filter(el => !el.area);
             if (noAreaInputs.length || noAreaButtons.length || noAreaLinks.length) {
                 addToArea('其他区域', 'input', noAreaInputs);
@@ -677,7 +724,7 @@ async def analyze_page() -> str:
                 title: document.title,
                 layout,
                 areas: areaMap,
-                counts: {inputs: inputs.length, buttons: buttons.length, links: links.length}
+                counts: {inputs: inputs.length, buttons: mergedButtons.length, links: links.length}
             }, null, 2);
         })()
     """)
