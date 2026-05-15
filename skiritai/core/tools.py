@@ -15,7 +15,8 @@ _context_ctx: contextvars.ContextVar[Any] = contextvars.ContextVar("_context_ctx
 
 # Callback invoked when configure_browser replaces the context/page.
 # BrowserSession registers this to keep its internal refs in sync.
-_on_context_replaced: list[Any] = []
+# Uses single-callback overwrite to avoid duplicate registration on start/stop cycles.
+_on_context_replaced: Any = None
 
 
 def set_page(page: Any):
@@ -32,9 +33,10 @@ def set_browser(browser: Any, context: Any):
 def on_context_replaced(callback):
     """Register a callback to be called when configure_browser replaces context/page.
 
-    The callback receives (new_context, new_page).
+    The callback receives (new_context, new_page). Overwrites any previous callback.
     """
-    _on_context_replaced.append(callback)
+    global _on_context_replaced
+    _on_context_replaced = callback
 
 
 def get_page() -> Any:
@@ -448,11 +450,13 @@ async def configure_browser(
 
     # Create new page and navigate
     new_page = await new_context.new_page()
+    nav_failed = False
     if current_url and current_url != "about:blank":
         try:
             await new_page.goto(current_url, wait_until="domcontentloaded", timeout=15000)
         except Exception as e:
             logger.warning(f"[configure_browser] Failed to navigate to {current_url}: {e}")
+            nav_failed = True
 
     # Close old context
     try:
@@ -465,11 +469,14 @@ async def configure_browser(
     _page_ctx.set(new_page)
 
     # Notify BrowserSession to sync internal refs
-    for cb in _on_context_replaced:
+    if _on_context_replaced is not None:
         try:
-            cb(new_context, new_page)
-        except Exception:
-            pass
+            _on_context_replaced(new_context, new_page)
+        except Exception as e:
+            logger.warning(f"[configure_browser] context_replaced callback failed: {e}")
 
     changed = ", ".join(f"{k}={v}" for k, v in ctx_options.items())
-    return f"浏览器配置已更新: {changed}。当前页面: {new_page.url}"
+    result = f"浏览器配置已更新: {changed}。当前页面: {new_page.url}"
+    if nav_failed:
+        result += "（警告：页面恢复失败，当前为空白页，请重新 navigate）"
+    return result
