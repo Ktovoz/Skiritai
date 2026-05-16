@@ -40,16 +40,23 @@ class DouyinSearchCase(BaseCase):
     async def verify_homepage(self):
         """验证首页内容。"""
         await self.ai.screenshot("homepage")
-        await self.ai.analyze_page()
         await self.ai.verify("页面顶部有搜索框，页面主体区域展示了视频卡片内容")
 
     # ---- 搜索功能 ----
 
     async def search_keyword(self):
-        """搜索关键词。"""
+        """搜索关键词。
+
+        未登录状态下点击搜索会弹出登录弹窗，这是正常行为。
+        关闭弹窗后应能进入搜索结果页。
+        """
         await self.ai.action(
-            "在搜索框中输入'陈伯全能王'，然后点击搜索按钮（不是侧边栏的搜索，是搜索框旁边的搜索按钮），"
-            "确认页面跳转到搜索结果页面（URL 包含 search）"
+            "1. 先用 analyze_page 查看页面结构，找到搜索输入框的 selector\n"
+            "2. 用 fill 在搜索框中输入'陈伯全能王'\n"
+            "3. 用 analyze_page 再次查看页面，找到搜索框旁边（顶部导航区）的搜索按钮，用 click 点击它\n"
+            "4. 如果点击后弹出了登录弹窗，用 dismiss_overlay 关闭它\n"
+            "5. 用 get_page_info 检查 URL 是否包含 search\n"
+            "6. 如果 URL 不包含 search，再试一次：重新输入关键词并点击搜索"
         )
         await self.ai.screenshot("search_result")
 
@@ -57,7 +64,6 @@ class DouyinSearchCase(BaseCase):
 
     async def verify_search_results(self):
         """验证搜索结果页面。"""
-        await self.ai.analyze_page()
         await self.ai.verify("页面已跳转到搜索结果页面，显示了与'陈伯全能王'相关的搜索结果")
 
     @on_failure(FailurePolicy.SKIP)
