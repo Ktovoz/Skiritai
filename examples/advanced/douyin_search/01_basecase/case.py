@@ -48,8 +48,8 @@ class DouyinSearchCase(BaseCase):
     async def search_keyword(self):
         """搜索关键词。"""
         await self.ai.action(
-            "在当前页面搜索框中搜索'陈伯全能王'并提交搜索，"
-            "确认 URL 变为搜索结果页"
+            "导航到搜索页面 https://www.douyin.com/search/陈伯全能王 ，"
+            "确认页面加载完成且 URL 包含 search"
         )
         await self.ai.screenshot("search_result")
 

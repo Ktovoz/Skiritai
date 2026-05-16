@@ -152,6 +152,7 @@ async def _resolve_text_locator(page, text: str, timeout: int, near: str = ""):
     """Find the best locator for a text match, using proximity when *near* is given."""
     if not near:
         near = _last_interacted_selector.get("")
+    logger.info(f"[click_text] _resolve_text_locator: text='{text}', near='{near}', last_selector='{_last_interacted_selector.get('')}'")
     if near:
         matches = page.get_by_text(text, exact=False)
         try:
