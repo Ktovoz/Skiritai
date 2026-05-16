@@ -265,10 +265,19 @@ async def run_agent(
     system_prompt = load_system_prompt(case_dir)
     agent = build_agent(system_prompt=system_prompt, llm=llm)
 
+    # Build user message with current page context
+    page_url = page.url or "about:blank"
+    page_title = ""
+    try:
+        page_title = await page.title()
+    except Exception:
+        pass
+    page_context = f"当前页面: {page_title} ({page_url})"
+
     if url:
-        user_msg = f"请先导航到 {url}，然后执行以下任务：\n{task_description}"
+        user_msg = f"{page_context}\n请先导航到 {url}，然后执行以下任务：\n{task_description}"
     else:
-        user_msg = f"请执行以下测试任务：\n{task_description}"
+        user_msg = f"{page_context}\n请执行以下测试任务（你已经在目标页面上，不要导航到其他网站）：\n{task_description}"
 
     steps: list[dict] = []
     final_summary = ""

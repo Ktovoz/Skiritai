@@ -199,8 +199,8 @@ def _wait_for_cdp(port: int, timeout: float = 10.0) -> bool:
 async def _apply_stealth(page) -> None:
     """Apply playwright-stealth patches to hide automation fingerprints."""
     try:
-        from playwright_stealth import stealth_async
-        await stealth_async(page)
+        from playwright_stealth import Stealth
+        await Stealth().apply_stealth_async(page)
         logger.info("[Browser] Stealth patches applied")
     except ImportError:
         logger.warning("[Browser] playwright-stealth not installed, skipping stealth patches")

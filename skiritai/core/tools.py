@@ -30,6 +30,62 @@ def _record_interaction(selector: str) -> None:
         _last_interacted_selector.set(selector)
 
 
+async def _check_post_click_popup(page: Any) -> str | None:
+    """After a click, check if a popup (login, modal) appeared.
+
+    Returns a description of what was found and dismissed, or None.
+    A popup appearing means the click reached its target and triggered
+    the page's handler (e.g. Douyin shows a login popup for guest users).
+    """
+    # Wait for popup to appear — some SPAs render popups asynchronously
+    for wait_ms in (500, 1000, 1500):
+        await asyncio.sleep(wait_ms / 1000)
+        try:
+            result = await safe_evaluate(page, """
+                (() => {
+                    const popupSelectors = [
+                        '[id*="login"]', '[class*="login-popup"]', '[class*="login-modal"]',
+                        '[id*="modal"]', '[id*="popup"]', '[class*="overlay"]',
+                        '[class*="mask"]', '[class*="modal"]', '[class*="popup"]',
+                        '[class*="dialog"]', '[role="dialog"]'
+                    ];
+                    const found = [];
+                    for (const sel of popupSelectors) {
+                        document.querySelectorAll(sel).forEach(el => {
+                            const s = window.getComputedStyle(el);
+                            if (s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0') {
+                                const rect = el.getBoundingClientRect();
+                                if (rect.width > 0 && rect.height > 0) {
+                                    // Try close button first
+                                    const closeBtn = el.querySelector(
+                                        '[class*="close"], [class*="Close"], [aria-label*="close" i], [aria-label*="关闭"]'
+                                    );
+                                    if (closeBtn) {
+                                        closeBtn.click();
+                                        found.push('closed:' + (el.id || el.className?.toString().substring(0, 30)));
+                                        return;
+                                    }
+                                    // No close button, remove from DOM
+                                    el.remove();
+                                    found.push('removed:' + (el.id || el.className?.toString().substring(0, 30)));
+                                }
+                            }
+                        });
+                    }
+                    if (document.body.style.overflow === 'hidden') {
+                        document.body.style.overflow = '';
+                    }
+                    return found.length ? found.join('; ') : null;
+                })()
+            """)
+            if result:
+                logger.info(f"[click] Post-click popup detected and handled: {result}")
+                return result
+        except Exception as e:
+            logger.debug(f"[click] Post-click popup check failed: {e}")
+    return None
+
+
 def set_page(page: Any):
     """Set the active Playwright page for tools to use."""
     _page_ctx.set(page)
@@ -150,6 +206,10 @@ async def click(selector: str) -> str:
                 return f"已点击元素: {selector}（已自动使用 force 模式）"
         raise
     _record_interaction(selector)
+    # Check if click triggered a popup (e.g. login wall) — that means click succeeded
+    popup = await _check_post_click_popup(page)
+    if popup:
+        return f"已点击元素: {selector}（点击触发了弹窗: {popup}，已自动关闭）"
     return f"已点击元素: {selector}"
 
 
@@ -254,6 +314,9 @@ async def click_text(text: str, timeout: int = 5000, near: str = "") -> str:
                 await locator.click(force=True, timeout=3000)
                 return f"已点击文本为 '{text}' 的元素（已自动使用 force 模式）"
         raise
+    popup = await _check_post_click_popup(page)
+    if popup:
+        return f"已点击文本为 '{text}' 的元素（点击触发了弹窗: {popup}，已自动关闭）"
     return f"已点击文本为 '{text}' 的元素"
 
 
