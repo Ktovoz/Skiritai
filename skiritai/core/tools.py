@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from skiritai.core.human_click import human_click
 from skiritai.core.llm_retry import _is_navigation_error
 from skiritai.core.tool_registry import register_tool
 from skiritai.logger import logger
@@ -109,11 +110,13 @@ async def click(selector: str) -> str:
     page = get_page()
     locator = page.locator(selector)
     try:
-        await locator.click(timeout=5000)
+        ok = await human_click(page, locator)
+        if not ok:
+            raise RuntimeError(f"human_click returned False for '{selector}'")
     except Exception as e:
         err = str(e)
-        if "intercept" in err.lower() or "timed out" in err.lower():
-            logger.warning(f"[click] Click intercepted for '{selector}': removing overlays...")
+        if "intercept" in err.lower() or "timed out" in err.lower() or "no bounding box" in err.lower():
+            logger.warning(f"[click] Click failed for '{selector}': removing overlays...")
             try:
                 await safe_evaluate(page, """
                     (() => {
@@ -135,7 +138,9 @@ async def click(selector: str) -> str:
                     })()
                 """)
                 await asyncio.sleep(0.3)
-                await locator.click(timeout=3000)
+                ok = await human_click(page, locator)
+                if not ok:
+                    raise RuntimeError("human_click returned False after overlay removal")
                 _record_interaction(selector)
                 return f"已点击元素: {selector}（已自动移除遮挡元素）"
             except Exception:
@@ -212,11 +217,13 @@ async def click_text(text: str, timeout: int = 5000, near: str = "") -> str:
     page = get_page()
     locator = await _resolve_text_locator(page, text, timeout, near)
     try:
-        await locator.click(timeout=5000)
+        ok = await human_click(page, locator)
+        if not ok:
+            raise RuntimeError(f"human_click returned False for text '{text}'")
     except Exception as e:
         err = str(e)
-        if "intercept" in err.lower() or "timed out" in err.lower():
-            logger.warning(f"[click_text] Click intercepted for '{text}': removing overlays...")
+        if "intercept" in err.lower() or "timed out" in err.lower() or "no bounding box" in err.lower():
+            logger.warning(f"[click_text] Click failed for '{text}': removing overlays...")
             try:
                 await safe_evaluate(page, """
                     (() => {
@@ -238,7 +245,9 @@ async def click_text(text: str, timeout: int = 5000, near: str = "") -> str:
                     })()
                 """)
                 await asyncio.sleep(0.3)
-                await locator.click(timeout=3000)
+                ok = await human_click(page, locator)
+                if not ok:
+                    raise RuntimeError("human_click returned False after overlay removal")
                 return f"已点击文本为 '{text}' 的元素（已自动移除遮挡元素）"
             except Exception:
                 logger.warning(f"[click_text] Overlay removal didn't resolve, trying force click...")
