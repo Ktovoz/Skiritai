@@ -227,6 +227,7 @@ class AIContext:
         import tempfile
         path = str(Path(tempfile.gettempdir()) / f"skiritai_{self.step_id}_{name}.png")
         try:
+            # full_page=False: avoid timeout on pages with slow font-loading / lazy content
             await self.page.screenshot(path=path, full_page=False, timeout=15000)
         except Exception:
             # Fallback: CDP screenshot bypasses font-loading wait
@@ -269,48 +270,44 @@ class AIContext:
         # Gather page state
         title = await self.page.title()
         url = self.page.url
+        # Build popup selector JS string from shared constant
+        from skiritai.core.tools import _POPUP_DETECT_SELECTORS
+        _popup_selectors_js = ", ".join(f'\'{s}\'' for s in _POPUP_DETECT_SELECTORS)
+
         try:
-            body_text = await self.page.evaluate("""(() => {
+            body_text = await self.page.evaluate(f"""(() => {{
                 // Include input/textarea values alongside body text so verify()
                 // can see what users have typed into form fields.
                 let text = document.body?.innerText?.substring(0, 2200) || '';
                 const inputs = document.querySelectorAll('input, textarea');
-                for (const inp of inputs) {
+                for (const inp of inputs) {{
                     const val = (inp.value || '').trim();
-                    if (val && !text.includes(val)) {
+                    if (val && !text.includes(val)) {{
                         const label = inp.placeholder || inp.name || inp.id || inp.type || 'input';
                         text += '\\n[输入框 ' + label + ': ' + val + ']';
-                    }
-                }
+                    }}
+                }}
                 // Detect visible popups/modals/overlays
-                const popupSelectors = [
-                    '[id*="login"]', '[class*="login-popup"]', '[class*="login-modal"]',
-                    '[id*="modal"]', '[id*="popup"]', '[class*="overlay"]',
-                    '[class*="mask"]', '[class*="modal"]', '[class*="popup"]',
-                    '[class*="dialog"]', '[role="dialog"]',
-                    '[class*="Login"]', '[class*="semi-modal"]', '[class*="semi-dialog"]',
-                    '[class*="semi-popup"]', '[data-testid*="login"]', '[data-testid*="modal"]',
-                    '.login-guide', '.login-panel', '#login-guide', '#login-panel'
-                ];
+                const popupSelectors = [{_popup_selectors_js}];
                 const popups = [];
-                for (const sel of popupSelectors) {
-                    document.querySelectorAll(sel).forEach(el => {
+                for (const sel of popupSelectors) {{
+                    document.querySelectorAll(sel).forEach(el => {{
                         const s = window.getComputedStyle(el);
-                        if (s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0') {
+                        if (s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0') {{
                             const rect = el.getBoundingClientRect();
-                            if (rect.width > 0 && rect.height > 0) {
+                            if (rect.width > 0 && rect.height > 0) {{
                                 const desc = el.id || el.className?.toString().substring(0, 40) || el.tagName;
                                 const inner = (el.innerText || '').substring(0, 100).trim();
                                 popups.push(desc + (inner ? ': ' + inner : ''));
-                            }
-                        }
-                    });
-                }
-                if (popups.length) {
+                            }}
+                        }}
+                    }});
+                }}
+                if (popups.length) {{
                     text += '\\n[可见弹窗/浮层: ' + popups.join('; ') + ']';
-                }
+                }}
                 return text.substring(0, 3000);
-            })()""")
+            }})()""")
         except Exception:
             body_text = ""
 
@@ -528,7 +525,15 @@ class AIContext:
             # where a URL change is expected. For click/fill/etc., page text
             # changes are too subtle for a reliable hash comparison.
             has_navigate = "page.goto" in script_content or "page.navigate" in script_content
-            if has_navigate:
+            # Skip URL-change check when the script only navigates to the same
+            # URL the page was already on (e.g. an explore-injected goto).
+            # This avoids false-positive "URL did not change" warnings.
+            _same_url_goto = False
+            if has_navigate and pre_url and "about:blank" not in pre_url:
+                import re as _re
+                _goto_urls = _re.findall(r'page\.goto\("([^"]+)"', script_content)
+                _same_url_goto = all(u.rstrip("/") == pre_url.rstrip("/") for u in _goto_urls)
+            if has_navigate and not _same_url_goto:
                 try:
                     post_url = self.page.url
                     if post_url == pre_url and "about:blank" not in pre_url:

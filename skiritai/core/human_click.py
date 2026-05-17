@@ -47,11 +47,7 @@ async def _get_bounding_box(page: Any, locator: Any) -> dict[str, float] | None:
 
 async def _ensure_cdp_session(page: Any) -> Any:
     """Create (or retrieve) a CDP session for *page*."""
-    try:
-        return await page.context.new_cdp_session(page)
-    except Exception:
-        # Fallback: some Playwright versions expose it differently
-        return await page.context.new_cdp_session(page)
+    return await page.context.new_cdp_session(page)
 
 
 # ---------------------------------------------------------------------------

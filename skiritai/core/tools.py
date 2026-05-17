@@ -25,6 +25,75 @@ _last_interacted_selector: contextvars.ContextVar[str] = contextvars.ContextVar(
     "_last_interacted_selector", default=""
 )
 
+# ── Shared popup/overlay selector lists ──────────────────────────────────
+# Used by _check_post_click_popup, click(), click_text(), type_text(),
+# dismiss_overlay, and ai_context.py verify().  Single source of truth.
+
+_POPUP_DETECT_SELECTORS = [
+    '[id*="login"]', '[class*="login-popup"]', '[class*="login-modal"]',
+    '[id*="modal"]', '[id*="popup"]', '[class*="overlay"]',
+    '[class*="mask"]', '[class*="modal"]', '[class*="popup"]',
+    '[class*="dialog"]', '[role="dialog"]',
+    '[class*="Login"]', '[class*="semi-modal"]', '[class*="semi-dialog"]',
+    '[class*="semi-popup"]', '[data-testid*="login"]', '[data-testid*="modal"]',
+    '.login-guide', '.login-panel', '#login-guide', '#login-panel',
+]
+
+_OVERLAY_REMOVAL_SELECTORS = [
+    '[id*="login"]', '[id*="modal"]', '[id*="popup"]',
+    '[class*="overlay"]', '[class*="mask"]', '[class*="modal"]',
+    '[class*="popup"]', '[class*="dialog"]', '[class*="interstitial"]',
+    '[role="dialog"]',
+]
+
+
+def _popup_detect_js() -> str:
+    """Return JS IIFE that returns descriptions of visible popup elements, or null."""
+    selectors_js = ", ".join(f'\'{s}\'' for s in _POPUP_DETECT_SELECTORS)
+    return (
+        "(() => {"
+        f"  const popupSelectors = [{selectors_js}];"
+        "    const found = [];"
+        "    for (const sel of popupSelectors) {"
+        "        document.querySelectorAll(sel).forEach(el => {"
+        "            const s = window.getComputedStyle(el);"
+        "            if (s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0') {"
+        "                const rect = el.getBoundingClientRect();"
+        "                if (rect.width > 0 && rect.height > 0) {"
+        "                    found.push('detected:' + (el.id || el.className?.toString().substring(0, 30)));"
+        "                }"
+        "            }"
+        "        });"
+        "    }"
+        "    return found.length ? found.join('; ') : null;"
+        "})()"
+    )
+
+
+def _overlay_removal_js() -> str:
+    """Return JS IIFE that removes visible overlay/popup elements and restores body scroll."""
+    selectors_js = ", ".join(f'\'{s}\'' for s in _OVERLAY_REMOVAL_SELECTORS)
+    return (
+        "(() => {"
+        f"    const selectors = [{selectors_js}];"
+        "    for (const sel of selectors) {"
+        "        document.querySelectorAll(sel).forEach(el => {"
+        "            const style = window.getComputedStyle(el);"
+        "            if (style.display !== 'none' && style.visibility !== 'hidden') {"
+        "                el.remove();"
+        "            }"
+        "        });"
+        "    }"
+        "    document.body.style.overflow = '';"
+        "})()"
+    )
+
+
+async def _remove_overlays(page: Any) -> None:
+    """Remove visible overlay/popup elements from the page."""
+    await safe_evaluate(page, _overlay_removal_js())
+    await asyncio.sleep(0.3)
+
 
 def _record_interaction(selector: str) -> None:
     if selector:
@@ -38,39 +107,19 @@ async def _check_post_click_popup(page: Any) -> str | None:
     Only restores body scroll-lock; does NOT auto-close/remove popups so that
     subsequent verify() steps can assert their presence.
     """
-    # Wait for popup to appear — some SPAs render popups asynchronously
+    # Wait for popup to appear — some SPAs render popups asynchronously.
+    # Early exit: stop checking once a popup is detected.
     for wait_ms in (500, 1000, 1500):
         await asyncio.sleep(wait_ms / 1000)
         try:
-            result = await safe_evaluate(page, """
-                (() => {
-                    const popupSelectors = [
-                        '[id*="login"]', '[class*="login-popup"]', '[class*="login-modal"]',
-                        '[id*="modal"]', '[id*="popup"]', '[class*="overlay"]',
-                        '[class*="mask"]', '[class*="modal"]', '[class*="popup"]',
-                        '[class*="dialog"]', '[role="dialog"]',
-                        '[class*="Login"]', '[class*="semi-modal"]', '[class*="semi-dialog"]',
-                        '[class*="semi-popup"]', '[data-testid*="login"]', '[data-testid*="modal"]',
-                        '.login-guide', '.login-panel', '#login-guide', '#login-panel'
-                    ];
-                    const found = [];
-                    for (const sel of popupSelectors) {
-                        document.querySelectorAll(sel).forEach(el => {
-                            const s = window.getComputedStyle(el);
-                            if (s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0') {
-                                const rect = el.getBoundingClientRect();
-                                if (rect.width > 0 && rect.height > 0) {
-                                    found.push('detected:' + (el.id || el.className?.toString().substring(0, 30)));
-                                }
-                            }
-                        });
-                    }
-                    return found.length ? found.join('; ') : null;
-                })()
-            """)
+            result = await safe_evaluate(page, _popup_detect_js())
             if result:
                 logger.info(f"[click] Post-click popup detected: {result}")
                 return result
+            # No popup detected after this round — no need to keep waiting
+            # if the first check (500ms) found nothing.
+            if wait_ms == 500:
+                return None
         except Exception as e:
             logger.debug(f"[click] Post-click popup check failed: {e}")
     return None
@@ -164,26 +213,7 @@ async def click(selector: str) -> str:
         if "intercept" in err.lower() or "timed out" in err.lower() or "no bounding box" in err.lower():
             logger.warning(f"[click] Click failed for '{selector}': removing overlays...")
             try:
-                await safe_evaluate(page, """
-                    (() => {
-                        const selectors = [
-                            '[id*="login"]', '[id*="modal"]', '[id*="popup"]',
-                            '[class*="overlay"]', '[class*="mask"]', '[class*="modal"]',
-                            '[class*="popup"]', '[class*="dialog"]', '[class*="interstitial"]',
-                            '[role="dialog"]'
-                        ];
-                        for (const sel of selectors) {
-                            document.querySelectorAll(sel).forEach(el => {
-                                const style = window.getComputedStyle(el);
-                                if (style.display !== 'none' && style.visibility !== 'hidden') {
-                                    el.remove();
-                                }
-                            });
-                        }
-                        document.body.style.overflow = '';
-                    })()
-                """)
-                await asyncio.sleep(0.3)
+                await _remove_overlays(page)
                 ok = await human_click(page, locator)
                 if not ok:
                     raise RuntimeError("human_click returned False after overlay removal")
@@ -333,26 +363,7 @@ async def click_text(text: str, timeout: int = 5000, near: str = "") -> str:
         if "intercept" in err.lower() or "timed out" in err.lower() or "no bounding box" in err.lower():
             logger.warning(f"[click_text] Click failed for '{text}': removing overlays...")
             try:
-                await safe_evaluate(page, """
-                    (() => {
-                        const selectors = [
-                            '[id*="login"]', '[id*="modal"]', '[id*="popup"]',
-                            '[class*="overlay"]', '[class*="mask"]', '[class*="modal"]',
-                            '[class*="popup"]', '[class*="dialog"]', '[class*="interstitial"]',
-                            '[role="dialog"]'
-                        ];
-                        for (const sel of selectors) {
-                            document.querySelectorAll(sel).forEach(el => {
-                                const style = window.getComputedStyle(el);
-                                if (style.display !== 'none' && style.visibility !== 'hidden') {
-                                    el.remove();
-                                }
-                            });
-                        }
-                        document.body.style.overflow = '';
-                    })()
-                """)
-                await asyncio.sleep(0.3)
+                await _remove_overlays(page)
                 ok = await human_click(page, locator)
                 if not ok:
                     raise RuntimeError("human_click returned False after overlay removal")
@@ -389,7 +400,7 @@ async def fill(selector: str, text: str) -> str:
         text: 要填写的文本内容
     """
     page = get_page()
-    await page.locator(selector).fill(text)
+    await page.locator(selector).fill(text, force=True)
     _record_interaction(selector)
     return f"已在 {selector} 中填写: {text}"
 
@@ -399,6 +410,7 @@ async def type_text(selector: str, text: str) -> str:
     """逐字符输入文本到元素。适用于 fill 无效的动态输入框（如 React 受控组件）。
 
     通过模拟真实键盘输入逐字符触发事件，对 React/Vue 等框架的受控组件兼容性更好。
+    注意：会先全选并删除已有内容（Ctrl+A → Backspace），再逐字符输入新文本。
 
     Args:
         selector: 输入框的 CSS 选择器
@@ -413,21 +425,7 @@ async def type_text(selector: str, text: str) -> str:
         err = str(e).lower()
         if "intercept" in err or "timed out" in err:
             logger.warning(f"[type_text] Click blocked, removing overlays...")
-            await safe_evaluate(page, """
-                (() => {
-                    const selectors = ['[id*="login"]', '[id*="modal"]', '[id*="popup"]',
-                        '[class*="overlay"]', '[class*="mask"]', '[class*="modal"]',
-                        '[class*="popup"]', '[class*="dialog"]', '[role="dialog"]'];
-                    for (const sel of selectors) {
-                        document.querySelectorAll(sel).forEach(el => {
-                            const style = window.getComputedStyle(el);
-                            if (style.display !== 'none' && style.visibility !== 'hidden') el.remove();
-                        });
-                    }
-                    document.body.style.overflow = '';
-                })()
-            """)
-            await asyncio.sleep(0.3)
+            await _remove_overlays(page)
             await locator.click(force=True, timeout=3000)
         else:
             raise
@@ -941,8 +939,7 @@ async def dismiss_overlay() -> str:
 
     try:
         result = await safe_evaluate(page, js)
-        import json
-        info = json.loads(result)
+        info = _json.loads(result)
         parts = []
         if info["closed"]:
             parts.append(f"已点击关闭按钮: {info['closed']}")
@@ -983,6 +980,8 @@ async def screenshot(name: str = "screenshot") -> str:
     """
     page = get_page()
     path = str(Path(tempfile.gettempdir()) / f"testagent_{name}.png")
+    # full_page=False: only capture visible viewport — avoids timeout on pages
+    # with lazy-loaded content below the fold and font-loading waits.
     await page.screenshot(path=path, full_page=False, timeout=15000)
     return f"截图已保存到 {path}"
 

@@ -172,7 +172,7 @@ def _action_to_line(action: str, args: dict) -> str | None:
         return f'    await page.locator("{_esc(args.get("selector", ""))}").fill("{_esc(args.get("text", ""))}", force=True)'
 
     if action == "type_text":
-        return f'    await page.locator("{_esc(args.get("selector", ""))}").press_sequentially("{_esc(args.get("text", ""))}", force=True)'
+        return f'    await page.locator("{_esc(args.get("selector", ""))}").press_sequentially("{_esc(args.get("text", ""))}", delay=50)'
 
     if action == "focus":
         return f'    await page.locator("{_esc(args.get("selector", ""))}").focus()'
@@ -220,9 +220,6 @@ def _action_to_line(action: str, args: dict) -> str | None:
     if action == "hover":
         return f'    await page.hover("{_esc(args.get("selector", ""))}")'
 
-    if action == "screenshot":
-        return f'    await page.screenshot(path="{_esc(args.get("name", "screenshot"))}.png", full_page=True)'
-
     if action == "wait":
         seconds = args.get("seconds", 1.0)
         return f"    await asyncio.sleep({seconds})"
@@ -247,8 +244,9 @@ def _action_to_line(action: str, args: dict) -> str | None:
 def _esc(s: str) -> str:
     """Escape a string for safe embedding in a double-quoted Python source literal.
 
-    Handles: backslashes, double quotes, newlines, carriage returns, tabs,
-    backticks (template literals), and ${} expressions.
+    Handles: backslashes, double quotes, newlines, carriage returns, tabs.
+    Note: backticks and ${} are not specially escaped because the string is
+    embedded in Python double-quoted literals, not JS template literals.
     """
     return (
         s.replace("\\", "\\\\")
