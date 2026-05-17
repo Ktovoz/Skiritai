@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import json as _json
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -33,9 +34,9 @@ def _record_interaction(selector: str) -> None:
 async def _check_post_click_popup(page: Any) -> str | None:
     """After a click, check if a popup (login, modal) appeared.
 
-    Returns a description of what was found and dismissed, or None.
-    A popup appearing means the click reached its target and triggered
-    the page's handler (e.g. Douyin shows a login popup for guest users).
+    Returns a description of what was found, or None.
+    Only restores body scroll-lock; does NOT auto-close/remove popups so that
+    subsequent verify() steps can assert their presence.
     """
     # Wait for popup to appear — some SPAs render popups asynchronously
     for wait_ms in (500, 1000, 1500):
@@ -47,7 +48,10 @@ async def _check_post_click_popup(page: Any) -> str | None:
                         '[id*="login"]', '[class*="login-popup"]', '[class*="login-modal"]',
                         '[id*="modal"]', '[id*="popup"]', '[class*="overlay"]',
                         '[class*="mask"]', '[class*="modal"]', '[class*="popup"]',
-                        '[class*="dialog"]', '[role="dialog"]'
+                        '[class*="dialog"]', '[role="dialog"]',
+                        '[class*="Login"]', '[class*="semi-modal"]', '[class*="semi-dialog"]',
+                        '[class*="semi-popup"]', '[data-testid*="login"]', '[data-testid*="modal"]',
+                        '.login-guide', '.login-panel', '#login-guide', '#login-panel'
                     ];
                     const found = [];
                     for (const sel of popupSelectors) {
@@ -56,30 +60,16 @@ async def _check_post_click_popup(page: Any) -> str | None:
                             if (s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0') {
                                 const rect = el.getBoundingClientRect();
                                 if (rect.width > 0 && rect.height > 0) {
-                                    // Try close button first
-                                    const closeBtn = el.querySelector(
-                                        '[class*="close"], [class*="Close"], [aria-label*="close" i], [aria-label*="关闭"]'
-                                    );
-                                    if (closeBtn) {
-                                        closeBtn.click();
-                                        found.push('closed:' + (el.id || el.className?.toString().substring(0, 30)));
-                                        return;
-                                    }
-                                    // No close button, remove from DOM
-                                    el.remove();
-                                    found.push('removed:' + (el.id || el.className?.toString().substring(0, 30)));
+                                    found.push('detected:' + (el.id || el.className?.toString().substring(0, 30)));
                                 }
                             }
                         });
-                    }
-                    if (document.body.style.overflow === 'hidden') {
-                        document.body.style.overflow = '';
                     }
                     return found.length ? found.join('; ') : null;
                 })()
             """)
             if result:
-                logger.info(f"[click] Post-click popup detected and handled: {result}")
+                logger.info(f"[click] Post-click popup detected: {result}")
                 return result
         except Exception as e:
             logger.debug(f"[click] Post-click popup check failed: {e}")
@@ -209,7 +199,7 @@ async def click(selector: str) -> str:
     # Check if click triggered a popup (e.g. login wall) — that means click succeeded
     popup = await _check_post_click_popup(page)
     if popup:
-        return f"已点击元素: {selector}（点击触发了弹窗: {popup}，已自动关闭）"
+        return f"已点击元素: {selector}（点击触发了弹窗: {popup}）"
     return f"已点击元素: {selector}"
 
 
@@ -247,18 +237,76 @@ async def _resolve_text_locator(page, text: str, timeout: int, near: str = ""):
         logger.info(f"[click_text] near='{near}': picked index {best_idx}/{count} "
                      f"(distance={best_dist:.0f}px) for text='{text}'")
         return matches.nth(best_idx)
-    # No near — exact-first, then partial fallback
-    exact_locator = page.get_by_text(text, exact=True).first
-    partial_locator = page.get_by_text(text, exact=False).first
-    locator = exact_locator
+    # No near — prefer button elements over links when multiple matches exist
+    exact_matches = page.get_by_text(text, exact=True)
+    partial_matches = page.get_by_text(text, exact=False)
+    matches = exact_matches
     try:
-        if timeout:
-            await exact_locator.wait_for(timeout=min(timeout, 2000))
+        await matches.first.wait_for(timeout=min(timeout or 5000, 2000))
     except Exception:
-        locator = partial_locator
+        matches = partial_matches
         if timeout:
-            await partial_locator.wait_for(timeout=timeout)
-    return locator
+            await matches.first.wait_for(timeout=timeout)
+
+    count = await matches.count()
+    if count <= 1:
+        return matches.first
+
+    # Multiple matches: prefer <button> > [role="button"] > <a> > other
+    # Also check ancestor elements since get_by_text often matches inner spans
+    # When priority ties, prefer elements closer to visible input fields (spatial context)
+    best_idx = 0
+    best_priority = 99
+    best_score = float("inf")
+    for i in range(count):
+        el = matches.nth(i)
+        result = await el.evaluate("""el => {
+            // Walk up to find the closest interactive ancestor (or self)
+            let node = el;
+            let priority = 3;
+            for (let depth = 0; depth < 3 && node; depth++) {
+                const tag = node.tagName.toLowerCase();
+                const role = (node.getAttribute('role') || '').toLowerCase();
+                const cursor = window.getComputedStyle(node).cursor;
+                if (tag === 'button') { priority = 0; break; }
+                if (role === 'button') { priority = 1; break; }
+                if (tag === 'a') { priority = 2; break; }
+                if (cursor === 'pointer') { priority = 1.5; break; }
+                node = node.parentElement;
+            }
+            // Spatial context: distance to nearest visible input field
+            const elRect = el.getBoundingClientRect();
+            const elCx = elRect.x + elRect.width / 2;
+            const elCy = elRect.y + elRect.height / 2;
+            let minDist = 99999;
+            document.querySelectorAll('input, textarea').forEach(inp => {
+                const s = window.getComputedStyle(inp);
+                if (s.display === 'none' || s.visibility === 'hidden') return;
+                const r = inp.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0) return;
+                const dx = (r.x + r.width / 2) - elCx;
+                const dy = (r.y + r.height / 2) - elCy;
+                const d = Math.sqrt(dx * dx + dy * dy);
+                if (d < minDist) minDist = d;
+            });
+            return JSON.stringify({priority, dist: minDist});
+        }""")
+        try:
+            info = _json.loads(result)
+            priority = info["priority"]
+            dist = info.get("dist", 99999)
+        except Exception:
+            priority = 3
+            dist = 99999
+
+        # Better = lower priority; on ties, prefer closer to an input field
+        if priority < best_priority or (priority == best_priority and dist < best_score):
+            best_priority = priority
+            best_score = dist
+            best_idx = i
+    logger.info(f"[click_text] no near: picked index {best_idx}/{count} "
+                 f"(priority={best_priority}, input_dist={best_score:.0f}px) for text='{text}'")
+    return matches.nth(best_idx)
 
 
 @register_tool
@@ -316,7 +364,7 @@ async def click_text(text: str, timeout: int = 5000, near: str = "") -> str:
         raise
     popup = await _check_post_click_popup(page)
     if popup:
-        return f"已点击文本为 '{text}' 的元素（点击触发了弹窗: {popup}，已自动关闭）"
+        return f"已点击文本为 '{text}' 的元素（点击触发了弹窗: {popup}）"
     return f"已点击文本为 '{text}' 的元素"
 
 
@@ -348,14 +396,44 @@ async def fill(selector: str, text: str) -> str:
 
 @register_tool
 async def type_text(selector: str, text: str) -> str:
-    """逐字符输入文本到元素。适用于隐藏或动态显示的输入框。
+    """逐字符输入文本到元素。适用于 fill 无效的动态输入框（如 React 受控组件）。
+
+    通过模拟真实键盘输入逐字符触发事件，对 React/Vue 等框架的受控组件兼容性更好。
 
     Args:
         selector: 输入框的 CSS 选择器
         text: 要输入的文本内容
     """
     page = get_page()
-    await page.locator(selector).press_sequentially(text)
+    locator = page.locator(selector)
+    # Click to focus — handle popups that might block the click
+    try:
+        await locator.click(timeout=5000)
+    except Exception as e:
+        err = str(e).lower()
+        if "intercept" in err or "timed out" in err:
+            logger.warning(f"[type_text] Click blocked, removing overlays...")
+            await safe_evaluate(page, """
+                (() => {
+                    const selectors = ['[id*="login"]', '[id*="modal"]', '[id*="popup"]',
+                        '[class*="overlay"]', '[class*="mask"]', '[class*="modal"]',
+                        '[class*="popup"]', '[class*="dialog"]', '[role="dialog"]'];
+                    for (const sel of selectors) {
+                        document.querySelectorAll(sel).forEach(el => {
+                            const style = window.getComputedStyle(el);
+                            if (style.display !== 'none' && style.visibility !== 'hidden') el.remove();
+                        });
+                    }
+                    document.body.style.overflow = '';
+                })()
+            """)
+            await asyncio.sleep(0.3)
+            await locator.click(force=True, timeout=3000)
+        else:
+            raise
+    await page.keyboard.press("Control+a")
+    await page.keyboard.press("Backspace")
+    await locator.press_sequentially(text, delay=50)
     _record_interaction(selector)
     return f"已在 {selector} 中输入: {text}"
 
@@ -905,7 +983,7 @@ async def screenshot(name: str = "screenshot") -> str:
     """
     page = get_page()
     path = str(Path(tempfile.gettempdir()) / f"testagent_{name}.png")
-    await page.screenshot(path=path, full_page=True)
+    await page.screenshot(path=path, full_page=False, timeout=15000)
     return f"截图已保存到 {path}"
 
 
@@ -1022,3 +1100,4 @@ async def configure_browser(
     if nav_failed:
         result += "（警告：页面恢复失败，当前为空白页，请重新 navigate）"
     return result
+
