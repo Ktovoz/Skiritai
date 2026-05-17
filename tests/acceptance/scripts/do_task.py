@@ -4,14 +4,14 @@ from playwright.async_api import async_playwright
 
 
 async def run(page, context):
-    await page.goto("http://example.com")
+    await page.goto("http://example.com", wait_until="domcontentloaded")
     await page.wait_for_load_state("networkidle")
 
 
 if __name__ == "__main__":
     async def main():
         pw = await async_playwright().start()
-        browser = await pw.chromium.launch(headless=True)
+        browser = await pw.chromium.launch(headless=False)
         ctx = await browser.new_context()
         page = await ctx.new_page()
         try:
